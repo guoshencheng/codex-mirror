@@ -1,0 +1,307 @@
+# Next.js Dashboard and Deployment Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 交付登录保护、实时更新的远程 Web 面板及可恢复部署。
+
+**Architecture:** Next.js App Router 提供页面与只读 DTO API，Node Route Handler 用 PostgreSQL 通知推送 SSE 失效信号。worker 与 Next.js 分进程部署，共享 PostgreSQL；独立凭据卷仅挂到 worker。
+
+**Tech Stack:** Next.js 16.3.5、React、TypeScript、pg、Playwright、Vitest、Docker Compose、Nginx。
+
+**Spec:** [设计](../specs/2026-09-22-codex-status-dashboard-design.md) §5–8；[执行索引](2026-09-22-codex-status-dashboard.md)。前置 P1/P2。
+
+## Global Constraints
+
+- 所有对外业务 HTTP 接口由 Next.js 提供，不额外引入 Fastify。
+- Provider 额度由远程服务自行获取；设备端不查询、不转发额度。
+- 凭据留在服务器，设备仅持有自己的上报凭证。
+- Web 与服务端同源；首期一个服务实例即可，无需 Redis。
+- 首期个人统一看板，不包含团队租户与角色权限。
+- 单管理员登录、服务端会话 cookie（Secure、HttpOnly、SameSite）及写操作 CSRF 防护。
+
+## Review Focus
+
+1. 未登录/设备 token/退出后的 SSE 不可读敏感数据：T1/T2。
+2. 断线、通知丢失、数据库连接重建仍恢复全量真值：T2。
+3. 前端缓存跨账号泄露、冻结的新鲜度标签：T2/T3。
+4. 缺失额度与零额度、多币种、多设备同账号：T3。
+5. Docker 重启、迁移失败、恢复备份不丢数据或重复启动 worker：T4。
+
+### P3-T1：管理员登录与会话边界
+
+**Files:** 新建 `migrations/003-admin.sql`、`src/server/auth/password.ts`、`session.ts`、`csrf.ts`、`rate-limit.ts`、`src/app/api/auth/login/route.ts`、`logout/route.ts`、`session/route.ts`、`src/app/login/page.tsx`、`scripts/create-admin.ts`、`tests/integration/admin-auth.test.ts`。
+
+**Interfaces:** `hashPassword(password): Promise<string>`、`verifyPassword(password, hash): Promise<boolean>` 使用 node:crypto scrypt；`createAdminSession(adminId): Promise<{token:string,csrfToken:string,expiresAt:string}>`；`requireAdmin(request): Promise<{id:string,sessionId:string}|null>`；`verifyCsrf(request,sessionId): Promise<boolean>`。session token 仅 cookie，csrfToken 可通过登录成功 JSON 或 `/api/auth/session` 返回。
+
+- [ ] **Step 1：写真实 HTTP 登录/登出和权限测试。** 测试服务使用独立端口和测试库，无生产凭据；support `authHttp` 仅封装 fetch 与 cookie jar。
+
+```ts
+it('does not accept device tokens as an admin session', async () => {
+  const token = await fixture.createDevice('device-a');
+  const r = await fetch(`${fixture.baseUrl}/api/provider-accounts`, {
+    headers: { Authorization: `Bearer ${token}` }, redirect: 'manual',
+  });
+  expect(r.status).toBe(401);
+});
+it('rejects refresh without CSRF and destroys session on logout', async () => {
+  const auth = await fixture.login();
+  expect((await auth.post('/api/provider-accounts/a/refresh', {}, false)).status).toBe(403);
+  expect((await auth.post('/api/auth/logout', {}, true)).status).toBe(204);
+  expect((await auth.get('/api/auth/session')).status).toBe(401);
+});
+```
+
+provider routes 在 T2 才可返回业务结果；T1 测试先覆盖 auth/session 和受保护的测试处理器，T2 将以上完整断言接到实际端点。fixture.login 使用测试管理员密码，只保存内存 cookie，返回 get/post helper；false 参数省略 CSRF，true 添加。
+
+- [ ] **Step 2：运行 auth 定向测试确认红灯；建立 admins、admin_sessions、login_attempts 表。** admins 单行约束，不提供注册；CLI 从隐藏终端输入密码（不使用命令行参数），随机盐 scrypt，密码至少 12 字符、UTF-8 字节上限 1024。会话 token 32 字节随机数、SHA-256 后入库，8 小时绝对有效期。CSRF 使用独立随机 token，hash 入库。
+- [ ] **Step 3：实现登录和 CSRF。**
+
+```ts
+const cookieOptions = {
+  httpOnly: true, secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict' as const, path: '/', maxAge: 8 * 60 * 60,
+};
+// 生产 cookie 名 __Host-dashboard_session；开发使用 dashboard_session
+```
+
+所有受保护的 route 每次执行 requireAdmin；页面在服务端同样检查，不依靠客户端隐藏。POST 验证 Origin 与部署固定 APP_ORIGIN 相等，再验证 CSRF；登录尚无会话，仅允许匹配 Origin 和 JSON Content-Type。登录失败统一 401，按源 IP+账号每 15 分钟最多 5 次；仅信任反向代理覆盖后的源地址，不信任公网任意 X-Forwarded-For。登出删除 DB session、清 cookie，通知 SSE 关闭对应会话。密码更新撤销所有会话。
+
+- [ ] **Step 4：运行正确/错误密码、枚举防护、速率限制、过期、Origin、退出测试并提交** `feat: secure dashboard with administrator sessions`。响应和 HTML 设置 no-store，密码与 cookie 不记录日志。
+
+### P3-T2：读模型 API、手动刷新与 SSE
+
+**Files:** 新建 `src/contracts/dashboard.ts`、`src/server/read-model/dashboard.ts`、`src/server/db/notifications.ts`、`src/server/stream/sse.ts`、`src/app/api/devices/route.ts`、`sessions/route.ts`、`provider-accounts/route.ts`、`provider-accounts/[id]/refresh/route.ts`、`dashboard/route.ts`、`stream/route.ts`、`tests/integration/read-model.test.ts`、`tests/integration/sse.test.ts`。
+
+**Interfaces:**
+
+```ts
+export interface DashboardDto {
+  generatedAt: string;
+  devices: Array<{ id: string; name: string; heartbeatAt: string|null;
+    connection: 'online'|'stale'|'offline'; streamIncomplete: boolean }>;
+  sessions: Array<{ id: string; deviceId: string; projectId: string|null;
+    projectName: string|null; title: string; state: SessionState['state'];
+    confidence: SessionState['confidence']; lastEventAt: string;
+    lastReceivedAt: string; turnStartedAt: string|null; currentTool: string|null }>;
+  accounts: Array<{ id: string; providerId: string; label: string;
+    deviceIds: string[]; snapshot: ProviderSnapshot|null;
+    lastAttemptAt: string|null; lastSuccessAt: string|null;
+    errorCode: ProviderFailure['code']|null; refreshStatus: 'idle'|'queued'|'running'|'error' }>;
+}
+export function getDashboard(now: Date): Promise<DashboardDto>;
+export function createAdminStream(request: Request, sessionId: string): Promise<Response>;
+```
+
+devices/sessions/provider-accounts API 分别返回 DTO 子集；dashboard 返回单一 repeatable-read 事务下的一致快照。对外 DTO 不含 credentialRef、options、token hash 或原始事件。
+
+- [ ] **Step 1：写泄露和重连测试。**
+
+```ts
+it('exposes one account linked to two devices without credentials', async () => {
+  await fixture.seedAccountWithDevices('a', ['d1', 'd2'], 'SECRET_CANARY');
+  const body = await fixture.adminJson('/api/dashboard');
+  expect(body.accounts).toHaveLength(1);
+  expect(body.accounts[0].deviceIds).toEqual(['d1', 'd2']);
+  expect(JSON.stringify(body)).not.toContain('SECRET_CANARY');
+  expect(body.accounts[0]).not.toHaveProperty('credentialRef');
+});
+it('sends sync on each connect and closes on logout', async () => {
+  const stream = await fixture.openAdminStream();
+  expect((await stream.next()).event).toBe('sync');
+  await fixture.commitEvent();
+  expect((await stream.nextData()).event).toBe('invalidate');
+  await fixture.logout();
+  await expect(stream.closed()).resolves.toBeUndefined();
+  expect((await fixture.rawStreamRequest()).status).toBe(401);
+});
+```
+
+fixture.openAdminStream 解析标准 SSE 行并忽略 comment keepalive；commitEvent 通过真实 ingest 接口写数据；closed 有 20 秒上限，不永久等待。重连测试断开 LISTEN 的专用连接后重建，断言收到新的 sync。
+
+- [ ] **Step 2：运行定向 integration 测试确认红灯。**
+- [ ] **Step 3：实现读模型与 refresh 路由。** Next Route Handlers 使用 runtime=nodejs、dynamic=force-dynamic，响应 Cache-Control: private,no-store。服务器页面直接调 getDashboard 不内网绕 API。手动刷新 requireAdmin+CSRF 后调用 P1 requestRefresh，queued/running=202、cooldown=429+Retry-After、未知账号=404。不在 handler 内 await Provider 查询、不调用 after。
+
+动态路由参数按 Next.js 16 的异步 params 读取，账号 ID 经长度/字符约束后作为参数化 SQL 参数；数据库连接延迟到请求或 worker 启动时创建，不在模块 import 和 next build 时连接数据库。首页也使用 dynamic=force-dynamic，禁止构建时生成真实账号页面。
+
+```ts
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id } = await context.params;
+  const admin = await requireAdmin(request);
+  if (!admin) return Response.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  if (!await verifyCsrf(request, admin.sessionId))
+    return Response.json({ error: 'FORBIDDEN' }, { status: 403 });
+  const outcome = await requestRefresh(id, new Date());
+  return Response.json({ status: outcome }, {
+    status: outcome === 'cooldown' ? 429 : 202,
+    headers: { 'Cache-Control': 'no-store', ...(outcome === 'cooldown' ? { 'Retry-After': '30' } : {}) },
+  });
+}
+```
+
+- [ ] **Step 4：实现 SSE。** PostgreSQL 专用连接 LISTEN `dashboard_changed`，进程内 fan-out；payload 仅 topic。先注册订阅再发 sync，避免连接快照竞态；每 15 秒发送 comment keepalive 并复核 session 是否仍有效。收到 DB 重连信号再次 sync；客户端在连接建立、invalidate 或 sync 时拉全量 dashboard 并合并重叠刷新，不建立定时任务轮询。
+
+```ts
+return new Response(stream, { headers: {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'private, no-store, no-transform',
+  'X-Accel-Buffering': 'no',
+} });
+// data 帧: event: invalidate\ndata: {"topic":"quota"}\n\n
+```
+
+ReadableStream cancel/request.signal abort 时移除 listener 和 timer。慢客户端最多积压一个 invalidate，超限关闭让其重连；每管理员最多 5 条连接。NOTIFY 不是持久日志，断线后必须全量拉取。保活重新校验仅查询管理员会话，不查询各端 Codex。页面本地计时器更新新鲜度，无需轮询设备。
+
+- [ ] **Step 5：运行权限、读模型和 SSE 集成测试并提交** `feat: serve live dashboard data through Next.js`。覆盖跨请求缓存不复用、通知先于数据 fetch、logout、session 到期、DB 断连、浏览器取消后资源回收。
+
+### P3-T3：面板、额度卡片与设备接入页
+
+**Files:** 修改 `src/app/page.tsx`；新建 `src/app/devices/page.tsx`、`src/components/dashboard.tsx`、`quota-card.tsx`、`metric-view.tsx`、`device-list.tsx`、`session-list.tsx`、`use-dashboard-stream.ts`、`src/app/globals.css`、`tests/unit/metric-view.test.tsx`、`tests/e2e/dashboard.spec.ts`、`playwright.config.ts`。
+
+**Interfaces:** `MetricView({metric: QuotaMetric})`；`Dashboard({initial: DashboardDto})`；`useDashboardStream(initial): {data:DashboardDto,connected:boolean,refresh():Promise<void>}`。UI 分支只依据 metric.kind；Provider 名称由通用 label 数据显示，不为某个 Provider 硬编码窗口。
+
+- [ ] **Step 1：先写显示语义和扩展性测试。**
+
+```tsx
+it('renders a new provider balance without adding a provider branch', () => {
+  render(<MetricView metric={{ kind: 'balance', key: 'new:CNY', label: '余额',
+    currency: 'CNY', total: '0.00', granted: null, toppedUp: null }} />);
+  expect(screen.getByText(/0.00/)).toBeVisible();
+  expect(screen.getByText(/CNY/)).toBeVisible();
+});
+it('shows unknown usage rather than zero remaining', () => {
+  render(<MetricView metric={{ kind: 'quota-window', key: 'x', label: '窗口',
+    usedPercent: null, windowDurationSeconds: null, resetsAt: null }} />);
+  expect(screen.getByText('额度数据不可用')).toBeVisible();
+  expect(screen.queryByText('100%')).toBeNull();
+});
+```
+
+Vitest 为本文件使用 jsdom，setup 引入 jest-dom；其余服务端测试保持 node。
+
+- [ ] **Step 2：运行 MetricView 测试确认红灯；实现通用指标。**
+
+```tsx
+function MetricView({ metric }: { metric: QuotaMetric }) {
+  if (metric.kind === 'balance')
+    return <p>{metric.label}：{metric.currency} {metric.total}</p>;
+  return <p>{metric.label}：{metric.usedPercent === null
+    ? '额度数据不可用' : `剩余 ${Math.max(0, Math.min(100, 100 - metric.usedPercent))}%`}</p>;
+}
+```
+
+补充 progressbar 可访问标签、原始金额精度、赠送/充值明细、浏览器时区重置时间。未知时间显示“未提供”；空 metrics 显示“服务未提供额度”，fetch 失败显示安全错误文案和上次成功时间，保留旧指标并标过期。
+
+- [ ] **Step 3：实现面板与接入说明。** 上方 Provider/账号卡片，下方设备或项目分组；待审批优先。状态同时显示 lastKnown 与 confidence，离线不显示确定工作中；Stop 文案“本轮停止”。设备页展示 token 创建 CLI 命令说明、连接健康、eventLoss、安装前会话无法回填说明。手机 390px 单列，桌面多列，无横向溢出。这里实现功能布局，视觉风格可在后续独立调整。
+
+useDashboardStream 使用同源 EventSource；invalidate 刷新期间再来事件时标 dirty，当前 fetch 完成后再取一次，避免旧响应覆盖新数据。网络失败保留数据显示“连接中断”；登录失效跳登录并清内存状态。计时器每秒计算持续时间，每 10 秒重新计算 stale/offline 标签，不发请求。提供手动全量刷新兜底；额度刷新按钮走 POST+CSRF。
+
+- [ ] **Step 4：浏览器测试。**
+
+```ts
+test('updates from an event and remains usable on mobile', async ({ page }) => {
+  await loginAsTestAdmin(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await postTestDeviceEvent('approval.requested');
+  await expect(page.getByText('待审批', { exact: true })).toBeVisible({ timeout: 5000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+```
+
+helpers 位于 `tests/e2e/helpers.ts`：loginAsTestAdmin 通过真实表单登录；postTestDeviceEvent 使用测试设备 bearer token 和连续序号请求真实 API，不拦截前端网络来伪造成功。其余用例：同账号两设备一张卡、三种 Provider、零/未知余额、断线重连、30 秒冷却、XSS 标题作为文本、按项目聚合、时间阈值。真实 Provider 不参与 CI。
+
+- [ ] **Step 5：通过组件测试与 Playwright，提交** `feat: build responsive status and quota dashboard`。
+
+### P3-T4：容器、自托管、迁移与最终验收
+
+**Files:** 新建 `deploy/Dockerfile`、`Dockerfile.worker`、`compose.yaml`、`nginx.conf`、`supervisord.conf`、`config.example.json`、`.env.example`、`.dockerignore`、`src/app/api/health/route.ts`、`scripts/backup.sh`、`scripts/restore.sh`、`docs/deployment.md`、`docs/acceptance.md`、`tests/integration/retention.test.ts`、`tests/e2e/deployment.spec.ts`。
+
+**Interfaces:** `GET /api/health` 仅返回 `{ok:boolean}` 不返回版本、账号或连接串；backup 接收输出目录，restore 接收归档路径及目标测试数据库。账号配置文件含 id/providerId/label/credentialRef/options，不含明文 secret。
+
+- [ ] **Step 1：先写保留策略与启动配置测试。** 使用真实 DB 插入 31 天事件、91 天额度历史、latest 和 stream 水位，运行清理函数后断言历史删除但 latest、水位、账号和会话保留。compose 静态校验要求只有 nginx 发布端口，不允许 web/worker/database 映射宿主端口，不允许凭据通过 NEXT_PUBLIC_* 暴露。
+- [ ] **Step 2：运行定向测试确认红灯；实现 worker 日清理和 health。** 每日清理在 worker 中执行，使用事务与清理锁；事件缺口尚待处理的记录不能随保留期静默删除，先标 stream incomplete 并记录安全诊断，避免永久悬挂被掩盖。session 未确认规则继续生效。
+- [ ] **Step 3：构建独立镜像。** web 多阶段 npm ci/build，仅复制 `.next/standalone`、`.next/static` 和 public，以非 root 运行。worker 编译独立入口，安装 P1-T2 验证过的固定 Codex/Kimi 运行时版本，持久化各账号独立目录，supervisor 在同容器管理本地 Kimi 服务和 worker；所有 Kimi 端口只绑定 127.0.0.1，Codex 使用 stdio。多账号分配固定独立目录与本地端口，启动前校验重复。版本来自验证记录，不在 Dockerfile 使用 latest。
+
+```yaml
+# deploy/compose.yaml 的服务边界；实现时补入 Dockerfile 路径和健康检查
+services:
+  web:
+    build: { context: '..', dockerfile: 'deploy/Dockerfile' }
+    environment:
+      DATABASE_URL: '${DATABASE_URL}'
+      APP_ORIGIN: '${APP_ORIGIN}'
+    depends_on:
+      db: { condition: service_healthy }
+  worker:
+    build: { context: '..', dockerfile: 'deploy/Dockerfile.worker' }
+    environment:
+      DATABASE_URL: '${DATABASE_URL}'
+      CONFIG_PATH: '/run/config/accounts.json'
+    volumes:
+      - './accounts.json:/run/config/accounts.json:ro'
+      - './secrets:/run/secrets:ro'
+      - 'runtime-auth:/var/lib/dashboard-auth'
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: dashboard
+      POSTGRES_USER: dashboard
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - 'postgres-data:/var/lib/postgresql/data'
+      - './secrets/db_password:/run/secrets/db_password:ro'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dashboard -d dashboard']
+      interval: 5s
+      retries: 10
+  nginx:
+    image: nginx:stable
+    ports: ['80:80', '443:443']
+    volumes:
+      - './nginx.conf:/etc/nginx/conf.d/default.conf:ro'
+      - './tls:/etc/nginx/tls:ro'
+    depends_on: [web]
+volumes:
+  postgres-data:
+  runtime-auth:
+```
+
+上段是服务边界代码，最终镜像将 postgres/nginx 标签锁定到当次验证 digest；DATABASE_URL 从受限 env 文件提供，禁止写 Git。worker/web 生产使用 restart:unless-stopped，worker 健康检查基于其心跳状态文件，不调用 Provider。迁移用 worker 镜像一次性命令先执行，失败不启动新版本；不是让每个 web 实例自行迁移。
+
+```nginx
+location /api/stream {
+    proxy_pass http://web:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 75s;
+    gzip off;
+}
+```
+
+其余 location 覆盖 X-Forwarded-For 为连接源地址，限制 body 256 KB，禁止缓存认证页面/API，HTTP 重定向 HTTPS；证书由部署环境提供并注明续期方式。额外代理层同样关闭 SSE 缓冲。构建 context 用 .dockerignore 排除 secrets、runtime、数据库和本地 env。
+
+- [ ] **Step 4：写启动/授权/备份恢复文档。**
+
+```sh
+docker compose -f deploy/compose.yaml build
+docker compose -f deploy/compose.yaml up -d db
+docker compose -f deploy/compose.yaml run --rm worker npm run db:migrate
+docker compose -f deploy/compose.yaml run --rm worker npm run admin:create
+docker compose -f deploy/compose.yaml up -d
+```
+
+worker 镜像必须包含 scripts/、migrations/、package.json 和运行这些命令所需的 tsx，不能只有 bundle。首次授权从服务器运行官方登录命令，持久化到运行时卷，不复制开发机凭据；真实命令以 P1 验证记录为准。创建/撤销设备 CLI 在 worker 容器运行，token 单次输出。
+
+backup 使用 `pg_dump -Fc` 和受限授权卷备份（umask 077）；restore 默认恢复到新的测试数据库并检查 schema version，绝不自动覆盖生产库。文档明确目标域名、TLS 路径、管理员创建、secret 权限和命令顺序；部署输入未提供时不能声称已远程部署。
+
+- [ ] **Step 5：执行完整验收并记录证据。** unit、integration、typecheck、build、Playwright、compose config；容器重启不丢会话/额度、worker 只有一个调度实例；关闭两台设备后服务器仍可查额度；正常事件 5 秒内可见；未登录/设备 token 不能读 SSE；退出后连接关闭；备份恢复到隔离库可读取既有状态。
+
+`docs/acceptance.md` 每条记录 PASS/FAIL/NOT_RUN、版本、时间和不含敏感信息的证据。三家真实账号、两台真实设备、目标服务器缺任何一个，都单独列 NOT_RUN，不能以合成 fixtures 代替真实验收。
+
+- [ ] **Step 6：提交** `feat: package dashboard for remote deployment`；全量审查最终 diff 与设计约束，用户审阅计划时选定的执行方法决定复核流程。无发布授权目标时交付可部署产物与操作文档，不擅自选择服务器或域名。
