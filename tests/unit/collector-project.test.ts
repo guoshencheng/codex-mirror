@@ -8,6 +8,7 @@ describe('collector project identity', () => {
     expect(https).toBe('git.example.com/Team/Project');
     expect(ssh).toBe(https);
     expect(https).not.toContain('SECRET');
+    expect(normalizeGitRemote('git.example.com:Team/Project.git?token=SECRET#fragment')).toBe(https);
   });
 
   it('uses a hashed project key and a short name rather than storing a full local path', () => {

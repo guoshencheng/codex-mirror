@@ -18,11 +18,11 @@ export function normalizeGitRemote(remote: string): string | null {
   try {
     let host: string;
     let pathname: string;
-    if (/^[^/@:]+@[^/:]+:.+$/.test(remote)) {
-      const match = /^(?:[^@]+@)?([^/:]+):(.+)$/.exec(remote);
+    if (!remote.includes('://') && !/^[a-zA-Z]:[\\/]/.test(remote)) {
+      const match = /^(?:[^@/:]+@)?([^/:]+):(.+)$/.exec(remote);
       if (!match) return null;
       host = match[1]!;
-      pathname = match[2]!;
+      pathname = match[2]!.split(/[?#]/, 1)[0]!;
     } else {
       const url = new URL(remote);
       if (!['http:', 'https:', 'ssh:', 'git:'].includes(url.protocol)) return null;
