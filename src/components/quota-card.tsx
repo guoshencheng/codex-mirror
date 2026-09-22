@@ -16,11 +16,12 @@ export interface QuotaCardProps {
   account: DashboardAccount;
   now: Date;
   onRefresh(accountId: string): void | Promise<void>;
+  readOnly?: boolean;
 }
 
 const SNAPSHOT_EXPIRY_MS = 15 * 60 * 1_000;
 
-export default function QuotaCard({ account, now, onRefresh }: QuotaCardProps) {
+export default function QuotaCard({ account, now, onRefresh, readOnly = false }: QuotaCardProps) {
   const metrics = account.snapshot?.metrics ?? [];
   const busy = account.refreshStatus === 'queued' || account.refreshStatus === 'running';
   const freshnessTimestamp = account.lastSuccessAt ?? account.snapshot?.observedAt ?? null;
@@ -56,9 +57,9 @@ export default function QuotaCard({ account, now, onRefresh }: QuotaCardProps) {
         <span className="ds-meta">最近成功：{displayTimestamp(account.lastSuccessAt)}</span>
         <span className="ds-meta">最近尝试：{displayTimestamp(account.lastAttemptAt)}</span>
       </div>
-      <button className="ds-btn" type="button" disabled={busy} onClick={() => onRefresh(account.id)}>
+      {!readOnly ? <button className="ds-btn" type="button" disabled={busy} onClick={() => onRefresh(account.id)}>
         刷新额度
-      </button>
+      </button> : null}
     </footer>
   </article>;
 }

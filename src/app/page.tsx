@@ -12,6 +12,7 @@ async function requestFromCookies(): Promise<Request> {
 }
 
 export default async function HomePage() {
+  if (process.env.VERCEL_ENV === 'preview') redirect('/demo');
   const admin = await requireAdmin(await requestFromCookies());
   if (!admin) redirect('/login');
 

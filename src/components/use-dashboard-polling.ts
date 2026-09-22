@@ -14,6 +14,7 @@ const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
 
 export interface DashboardPollingOptions {
   navigate?(path: string): void;
+  readOnly?: boolean;
 }
 
 export interface DashboardPollingValue {
@@ -38,8 +39,9 @@ function deviceConnection(heartbeatAt: string | null, nowMilliseconds: number): 
 
 export function useDashboardPolling(initial: DashboardDto, options: DashboardPollingOptions = {}): DashboardPollingValue {
   const navigate = options.navigate ?? defaultNavigate;
+  const readOnly = options.readOnly ?? false;
   const [data, setData] = useState(initial);
-  const [syncHealthy, setSyncHealthy] = useState(false);
+  const [syncHealthy, setSyncHealthy] = useState(readOnly);
   const [now, setNow] = useState(() => new Date(initial.generatedAt));
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const alive = useRef(false);
@@ -81,7 +83,7 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
   }, [redirectToLogin]);
 
   const refresh = useCallback(async (): Promise<void> => {
-    if (!alive.current || redirected.current) return;
+    if (readOnly || !alive.current || redirected.current) return;
     if (activeLoad.current) {
       refreshPending.current = true;
       await activeLoad.current;
@@ -125,10 +127,10 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
     finally {
       if (activeLoad.current === task) activeLoad.current = null;
     }
-  }, [redirectToLogin]);
+  }, [readOnly, redirectToLogin]);
 
   const refreshQuota = useCallback(async (accountId: string): Promise<void> => {
-    if (!alive.current || redirected.current) return;
+    if (readOnly || !alive.current || redirected.current) return;
     const token = csrfRef.current ?? await renewCsrf();
     if (!token || redirected.current) return;
     let response: Response;
@@ -167,10 +169,10 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
       }
     }
     await refresh();
-  }, [redirectToLogin, refresh, renewCsrf]);
+  }, [readOnly, redirectToLogin, refresh, renewCsrf]);
 
   const logout = useCallback(async (): Promise<void> => {
-    if (!alive.current || redirected.current) return;
+    if (readOnly || !alive.current || redirected.current) return;
     const sendLogout = (token: string) => fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'same-origin',
@@ -191,22 +193,26 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
     } catch {
       // Retain the authenticated UI when logout could not reach the server.
     }
-  }, [redirectToLogin, renewCsrf]);
+  }, [readOnly, redirectToLogin, renewCsrf]);
 
   useEffect(() => {
     alive.current = true;
     redirected.current = false;
-    void renewCsrf();
-    if (document.visibilityState !== 'hidden') void refresh();
-    const dashboardTimer = setInterval(() => {
-      if (document.visibilityState !== 'hidden') void refresh();
-    }, DASHBOARD_POLL_INTERVAL_MS);
+    let dashboardTimer: ReturnType<typeof setInterval> | undefined;
+    let freshnessTimer: ReturnType<typeof setInterval> | undefined;
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'hidden') void refresh();
     };
-    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (!readOnly) {
+      void renewCsrf();
+      if (document.visibilityState !== 'hidden') void refresh();
+      dashboardTimer = setInterval(() => {
+        if (document.visibilityState !== 'hidden') void refresh();
+      }, DASHBOARD_POLL_INTERVAL_MS);
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
     const clockTimer = setInterval(() => setNow(new Date()), 1_000);
-    const freshnessTimer = setInterval(() => {
+    if (!readOnly) freshnessTimer = setInterval(() => {
       const at = Date.now();
       setData(previous => ({
         ...previous,
@@ -217,11 +223,11 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
     return () => {
       alive.current = false;
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      clearInterval(dashboardTimer);
+      if (dashboardTimer) clearInterval(dashboardTimer);
       clearInterval(clockTimer);
-      clearInterval(freshnessTimer);
+      if (freshnessTimer) clearInterval(freshnessTimer);
     };
-  }, [refresh, renewCsrf]);
+  }, [readOnly, refresh, renewCsrf]);
 
   // Keep the ref in sync for callbacks that may run before React commits state.
   useEffect(() => { csrfRef.current = csrfToken; }, [csrfToken]);

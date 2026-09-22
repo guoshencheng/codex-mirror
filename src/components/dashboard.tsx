@@ -1,99 +1,187 @@
 'use client';
 
 import Link from 'next/link';
-import type { DashboardDto, DashboardSession } from '../contracts/dashboard';
+import { useEffect, useRef, useState } from 'react';
+import type { DashboardDto } from '../contracts/dashboard';
 import DeviceList from './device-list';
 import QuotaCard from './quota-card';
-import SessionList from './session-list';
+import PixelQuotaRow from './pixel-quota-row';
+import { ageText, durationText, isCurrentSession, sessionLabels } from './pixel-dashboard-model';
 import { useDashboardPolling } from './use-dashboard-polling';
+import styles from './pixel-dashboard.module.css';
 
-function elapsed(start: string | null, now: Date): string | null {
-  if (!start) return null;
-  const startedAt = Date.parse(start);
-  if (!Number.isFinite(startedAt)) return null;
-  const seconds = Math.max(0, Math.floor((now.getTime() - startedAt) / 1_000));
-  const hours = Math.floor(seconds / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
-  const remainder = seconds % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+type Detail = { kind: 'account'; id: string } | { kind: 'session'; id: string; deviceId: string } | { kind: 'menu' | 'devices' };
+
+function Pager({ page, pages, label, onChange }: { page: number; pages: number; label: string; onChange(page: number): void }) {
+  if (pages <= 1) return null;
+  return <span className={styles.pager}>
+    <button aria-label={`上一页${label}`} disabled={page === 0} onClick={() => onChange(page - 1)}>‹</button>
+    <span aria-label={`${label}页码`}>{page + 1}/{pages}</span>
+    <button aria-label={`下一页${label}`} disabled={page + 1 >= pages} onClick={() => onChange(page + 1)}>›</button>
+  </span>;
 }
 
-function sessionDuration(session: DashboardSession, now: Date): string | null {
-  return elapsed(session.turnStartedAt, now);
+function PixelRobot() {
+  return <span className={styles.robot} aria-hidden="true"><svg viewBox="0 0 32 32" shapeRendering="crispEdges">
+    <path fill="#0b151a" d="M14 2h4v5h-4zM6 7h20v3h3v15h-4v5h-7v-4h-4v4H7v-5H3V10h3z" />
+    <path fill="currentColor" d="M14 2h4v3h-4zM7 8h18v3h3v12h-5v5h-4v-5h-6v5H9v-5H4V11h3z" />
+    <path fill="#dcecc1" d="M8 9h16v2H8z" /><path fill="#233638" d="M8 12h16v9H8z" />
+    <path fill="currentColor" d="M10 14h3v3h-3zM19 14h3v3h-3zM14 18h4v1h-4z" />
+    <path fill="#344b49" d="M3 29h26v2H3z" />
+  </svg></span>;
 }
 
-export interface DashboardProps {
-  initial: DashboardDto;
-}
+export interface DashboardProps { initial: DashboardDto; readOnly?: boolean }
 
-export default function Dashboard({ initial }: DashboardProps) {
-  const { data, syncHealthy, now, refresh, refreshQuota, logout } = useDashboardPolling(initial);
+export default function Dashboard({ initial, readOnly = false }: DashboardProps) {
+  const { data, syncHealthy, now, refresh, refreshQuota, logout } = useDashboardPolling(initial, { readOnly });
+  const host = useRef<HTMLElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const [scale, setScale] = useState<number | null>(null);
+  const [accountPage, setAccountPage] = useState(0);
+  const [sessionPage, setSessionPage] = useState(0);
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  return <main className="ds-app">
-    <header className="ds-topbar">
-      <Link className="ds-topbar__brand" href="/">Codex 状态面板</Link>
-      <nav className="ds-topbar__nav" aria-label="主导航">
-        <Link href="/">状态面板</Link>
-        <Link href="/devices">设备</Link>
-        <button className="ds-btn ds-btn--sm" type="button" onClick={() => void logout()}>退出登录</button>
-      </nav>
-    </header>
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    const fit = () => setScale(Math.min(element.clientWidth, element.clientHeight) / 400);
+    fit();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', fit);
+      return () => window.removeEventListener('resize', fit);
+    }
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
-    <header className="ds-page-header">
-      <div>
-        <span className="ds-page-header__context">状态同步</span>
-        <h1 className="ds-page-header__title">任务与额度</h1>
-        <p className="ds-page-header__description">设备变化通过事件上报；页面可见时每 10 秒同步状态。</p>
-      </div>
-      <div className="ds-actions">
-        <span className={`ds-status ${syncHealthy ? 'ds-status--active' : 'ds-status--waiting'}`} aria-label="面板同步状态" aria-live="polite">
-          {syncHealthy ? '同步正常' : '同步中断'}
-        </span>
-        <button className="ds-btn" type="button" onClick={() => void refresh()}>刷新全部</button>
-      </div>
-    </header>
+  useEffect(() => {
+    if (detail) backButton.current?.focus();
+    else opener.current?.focus();
+  }, [detail]);
 
-    <section className="ds-stack" aria-labelledby="quota-heading">
-      <h2 className="ds-panel-title" id="quota-heading">Provider 额度</h2>
-      {data.accounts.length > 0
-        ? <div className="ds-metric-grid">
-          {data.accounts.map(account => <QuotaCard key={account.id} account={account} now={now} onRefresh={refreshQuota} />)}
-        </div>
-        : <p className="ds-constraint">尚未配置额度账号</p>}
-    </section>
+  const devicesById = new Map(data.devices.map(device => [device.id, device]));
+  const current = data.sessions.filter(session => isCurrentSession(session, devicesById.get(session.deviceId), syncHealthy));
+  const working = current.filter(session => session.state === 'WORKING');
+  const waiting = current.filter(session => session.state === 'WAITING_APPROVAL').length;
+  const online = data.devices.filter(device => device.connection === 'online').length;
+  const uncertain = data.sessions.length - current.length;
+  const offline = !syncHealthy || (data.devices.length > 0 && online === 0);
+  const title = offline ? '连接待恢复' : waiting ? '等你点个头' : working.length ? '正在工作' : uncertain ? '状态待确认' : '正在待命';
+  const priority = (state: string) => state === 'WAITING_APPROVAL' ? 0 : state === 'WORKING' ? 1 : 2;
+  const sessions = [...data.sessions].sort((a, b) => priority(a.state) - priority(b.state) || b.lastEventAt.localeCompare(a.lastEventAt));
+  const accountPages = Math.max(1, Math.ceil(data.accounts.length / 3));
+  const sessionPages = Math.max(1, Math.ceil(sessions.length / 6));
+  const visibleAccountPage = Math.min(accountPage, accountPages - 1);
+  const visibleSessionPage = Math.min(sessionPage, sessionPages - 1);
+  const selectedAccount = detail?.kind === 'account' ? data.accounts.find(account => account.id === detail.id) : undefined;
+  const selectedSession = detail?.kind === 'session' ? data.sessions.find(session => session.id === detail.id && session.deviceId === detail.deviceId) : undefined;
+  const selectedDevice = selectedSession ? devicesById.get(selectedSession.deviceId) : undefined;
+  const longestStart = working.map(session => session.turnStartedAt).filter((at): at is string => at !== null && Number.isFinite(Date.parse(at))).sort()[0] ?? null;
 
-    <div className="ds-content-grid">
-      <section className="ds-stack" aria-labelledby="devices-heading">
-        <div className="ds-card__header">
-          <h2 className="ds-panel-title" id="devices-heading">设备</h2>
-          <Link className="ds-btn ds-btn--sm" href="/devices">设备接入</Link>
-        </div>
-        <DeviceList devices={data.devices} />
-      </section>
+  const open = (next: Detail, button: HTMLButtonElement) => { opener.current = button; setDetail(next); };
+  const refreshSnapshot = async () => {
+    setRefreshing(true);
+    try { await refresh(); } finally { setRefreshing(false); }
+  };
 
-      <section className="ds-stack" aria-labelledby="sessions-heading">
-        <h2 className="ds-panel-title" id="sessions-heading">会话</h2>
-        <SessionList sessions={data.sessions} devices={data.devices} />
-        {data.sessions.some(session => session.turnStartedAt !== null)
-          ? <section className="ds-card" aria-label="会话持续时间">
-            <h3 className="ds-card__title">本轮持续时间</h3>
-            <div className="ds-list">
-              {data.sessions.filter(session => session.turnStartedAt !== null).map(session => (
-                <p className="ds-row" key={`${session.deviceId}:${session.id}`}>
-                  <span className="ds-row__main">{session.title}</span>
-                  <time className="ds-status ds-status--muted">{sessionDuration(session, now)}</time>
-                </p>
-              ))}
-            </div>
+  return <main ref={host} className={styles.host} aria-label="Codex 状态面板">
+    <div className={styles.frame} style={{ width: scale === null ? 0 : scale * 400, height: scale === null ? 0 : scale * 400 }}>
+      <div className={`${styles.board} ${offline ? styles.offline : waiting ? styles.waiting : ''}`}
+        data-testid="pixel-dashboard" style={{ transform: `scale(${scale ?? 1})`, visibility: scale === null ? 'hidden' : 'visible' }}
+        onKeyDown={event => { if (event.key === 'Escape' && detail) { event.preventDefault(); setDetail(null); } }}>
+        <header className={styles.topbar}>
+          <h1>▦ CODEX DESK</h1>
+          <div className={styles.topActions}>
+            <span className={styles.connection} aria-label="面板同步状态" aria-live="polite"><i />{readOnly ? '预览模式' : syncHealthy ? '同步正常' : '同步中断'}</span>
+            <button aria-label="面板菜单" title="设备、刷新与退出" onClick={event => open({ kind: 'menu' }, event.currentTarget)}>☰</button>
+          </div>
+        </header>
+        {detail ? <section className={styles.detailView} aria-label="面板详情">
+          <button className={styles.back} aria-label="返回面板" ref={backButton} onClick={() => setDetail(null)}>‹ 返回面板</button>
+          <div className={styles.detailScroll}>
+            {detail.kind === 'account' ? selectedAccount
+              ? <QuotaCard account={selectedAccount} now={now} onRefresh={refreshQuota} readOnly={readOnly} /> : <p>该账号已不在当前快照中</p> : null}
+            {detail.kind === 'session' ? selectedSession ? <article className={styles.sessionDetail}>
+              <h2>{selectedSession.title}</h2>
+              <p>{isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? '当前状态' : '最近状态'}：{sessionLabels[selectedSession.state]}</p>
+              {!isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? <p className={styles.warning}>当前执行情况未知，请检查设备连接与状态同步。</p> : null}
+              <dl><dt>项目</dt><dd>{selectedSession.projectName ?? '未归属项目'}</dd>
+                <dt>设备</dt><dd>{selectedDevice?.name ?? '未知设备'}</dd>
+                <dt>当前工具</dt><dd>{selectedSession.currentTool ?? '未上报'}</dd>
+                <dt>状态可信度</dt><dd>{selectedSession.confidence === 'confirmed' ? '已确认' : '未确认'}</dd>
+                <dt>最近事件</dt><dd><time dateTime={selectedSession.lastEventAt}>{selectedSession.lastEventAt}</time></dd>
+                <dt>本轮开始</dt><dd>{selectedSession.turnStartedAt ?? '未上报'}</dd>
+                {selectedSession.state === 'WORKING' && isCurrentSession(selectedSession, selectedDevice, syncHealthy)
+                  ? <><dt>本轮持续</dt><dd>{durationText(selectedSession.turnStartedAt, now)}</dd></> : null}
+              </dl>
+            </article> : <p>该会话已不在当前快照中</p> : null}
+            {detail.kind === 'devices' ? <><h2>设备状态</h2><DeviceList devices={data.devices} /><Link className={styles.action} href="/devices">设备接入</Link></> : null}
+            {detail.kind === 'menu' ? <nav className={styles.menu} aria-label="面板操作">
+              <h2>面板操作</h2>
+              {readOnly ? <p>只读演示数据，不连接账号或设备。点击额度行或会话行查看界面详情。</p> : <>
+                <Link className={styles.action} href="/devices">设备</Link>
+                <button className={styles.action} onClick={() => setDetail({ kind: 'devices' })}>设备状态</button>
+                <button className={styles.action} disabled={refreshing} onClick={() => void refreshSnapshot()}>{refreshing ? '同步中…' : '刷新全部'}</button>
+                <button className={styles.action} onClick={() => void logout()}>退出登录</button>
+                <p>页面可见时每 10 秒同步状态。点击额度行或会话行查看完整信息。</p>
+              </>}
+            </nav> : null}
+          </div>
+        </section> : <>
+          <section className={styles.hero} aria-label="任务总状态">
+            <PixelRobot /><h2>{title}</h2>
+            <span className={styles.summary}>{offline ? '显示最近快照' : waiting ? `${waiting} 个任务待审批` : working.length ? `${working.length} 个任务执行中` : uncertain ? `${uncertain} 个状态待确认` : '等待新的任务'}</span>
+            {working.length && !offline ? <time className={styles.timer} title="当前执行中任务的最长持续时间">{durationText(longestStart, now)}</time> : null}
           </section>
-          : null}
-      </section>
+          <section className={styles.quota} aria-labelledby="quota-heading">
+            <div className={styles.sectionHead}><h2 id="quota-heading">额度 <small>/ 剩余</small></h2>
+              <Pager page={visibleAccountPage} pages={accountPages} label="额度" onChange={setAccountPage} />
+              {accountPages === 1 ? <span>额度窗口 · 或余额</span> : null}
+            </div>
+            <ul className={styles.providerList} aria-label="Provider 额度">
+              {data.accounts.slice(visibleAccountPage * 3, visibleAccountPage * 3 + 3).map(account => <PixelQuotaRow
+                key={account.id} account={account} now={now} onOpen={() => {
+                  opener.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+                  setDetail({ kind: 'account', id: account.id });
+                }} />)}
+            </ul>
+            {!data.accounts.length ? <p className={styles.empty}>尚未配置额度账号</p> : null}
+          </section>
+          <section className={styles.sessions} aria-labelledby="sessions-heading">
+            <div className={styles.sectionHead}><h2 id="sessions-heading">会话 <small>/ {sessions.length}</small></h2>
+              <span>{waiting} 待审批 · {working.length} 执行中</span>
+              <Pager page={visibleSessionPage} pages={sessionPages} label="会话" onChange={setSessionPage} />
+            </div>
+            <ul className={styles.sessionList} aria-label="会话">
+              {sessions.slice(visibleSessionPage * 6, visibleSessionPage * 6 + 6).map(session => {
+                const device = devicesById.get(session.deviceId);
+                const currentState = isCurrentSession(session, device, syncHealthy);
+                const label = `${currentState ? '' : '最近：'}${sessionLabels[session.state]}`;
+                return <li key={`${session.deviceId}:${session.id}`} className={currentState && session.state === 'WAITING_APPROVAL' ? styles.attention : ''}>
+                  <h3><button className={styles.sessionRow} onClick={event => open({ kind: 'session', id: session.id, deviceId: session.deviceId }, event.currentTarget)}
+                    title={`${session.title} · ${session.projectName ?? '未归属项目'} · ${device?.name ?? '未知设备'} · ${label}`}>
+                    <span className={styles.symbol} aria-hidden="true">{!currentState ? '?' : session.state === 'WAITING_APPROVAL' ? '!' : session.state === 'WORKING' ? '›' : '·'}</span>
+                    <span className={styles.sessionName}>{session.title}</span>
+                    <span className={styles.project}>{session.projectName ?? device?.name ?? '未归属项目'}</span>
+                    <span className={styles.badge}>{label}</span>
+                  </button></h3>
+                </li>;
+              })}
+            </ul>
+            {!sessions.length ? <p className={styles.empty}>暂无会话事件<br /><Link href="/devices">接入设备后展示任务状态</Link></p> : null}
+          </section>
+        </>}
+        <footer className={styles.footer}>
+          <button title="查看设备状态" aria-label="查看设备状态" onClick={event => open({ kind: 'devices' }, event.currentTarget)}>■ {online}/{data.devices.length} 在线{data.devices.length > online ? ` · ${data.devices.length - online} 未在线` : ''}</button>
+          <button title={readOnly ? '演示数据' : `快照时间：${data.generatedAt}；点击刷新`} aria-label={readOnly ? '演示数据' : '刷新面板'} disabled={refreshing || readOnly} onClick={() => void refreshSnapshot()}>
+            {readOnly ? '演示数据 · 只读' : refreshing ? '同步中…' : `${syncHealthy ? '' : '中断 · '}${ageText(data.generatedAt, now)}同步 ↻`}
+          </button>
+        </footer>
+      </div>
     </div>
-
-    <footer className="ds-statusbar">
-      <span>{syncHealthy ? '自动同步：页面可见时每 10 秒' : '同步中断，显示最近快照'}</span>
-      <span>快照时间：<time dateTime={data.generatedAt}>{data.generatedAt.replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace(/Z$/, ' UTC')}</time></span>
-      <span>当前时间：<time dateTime={now.toISOString()}>{now.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace(/Z$/, ' UTC')}</time></span>
-    </footer>
   </main>;
 }

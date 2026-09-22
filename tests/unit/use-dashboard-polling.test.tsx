@@ -335,3 +335,32 @@ describe('useDashboardPolling', () => {
     expect(screen.getByLabelText('sync state')).toHaveTextContent('disconnected');
   });
 });
+
+function ReadOnlyHarness({ navigate }: { navigate(path: string): void }) {
+  const { data, syncHealthy, refresh, refreshQuota, logout } = useDashboardPolling(initial, { navigate, readOnly: true });
+  return <main>
+    <output aria-label="read-only sync">{syncHealthy ? 'connected' : 'disconnected'}</output>
+    <output aria-label="read-only snapshot">{data.generatedAt}</output>
+    <button onClick={() => void refresh()}>refresh dashboard</button>
+    <button onClick={() => void refreshQuota('account-1')}>refresh quota</button>
+    <button onClick={() => void logout()}>logout</button>
+  </main>;
+}
+
+describe('read-only dashboard preview', () => {
+  it('renders its snapshot without contacting auth, dashboard, quota, or logout endpoints', async () => {
+    const navigate = vi.fn();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ReadOnlyHarness navigate={navigate} />);
+    expect(screen.getByLabelText('read-only sync')).toHaveTextContent('connected');
+    expect(screen.getByLabelText('read-only snapshot')).toHaveTextContent(initial.generatedAt);
+    fireEvent.click(screen.getByRole('button', { name: 'refresh dashboard' }));
+    fireEvent.click(screen.getByRole('button', { name: 'refresh quota' }));
+    fireEvent.click(screen.getByRole('button', { name: 'logout' }));
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});

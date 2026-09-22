@@ -41,10 +41,11 @@ export async function createAdminSession(adminId: string, pool: Pool = authDatab
   return { token, csrfToken, expiresAt: expiresAt.toISOString() };
 }
 
-export async function requireAdmin(request: Request, pool: Pool = authDatabasePool(), now = new Date()): Promise<AuthenticatedAdmin | null> {
+export async function requireAdmin(request: Request, pool?: Pool, now = new Date()): Promise<AuthenticatedAdmin | null> {
   const token = readCookie(request, sessionCookieName());
   if (!token) return null;
-  const result = await pool.query(`SELECT s.id AS session_id, s.admin_id
+  const database = pool ?? authDatabasePool();
+  const result = await database.query(`SELECT s.id AS session_id, s.admin_id
     FROM admin_sessions s JOIN admins a ON a.id = s.admin_id
     WHERE s.token_hash = $1 AND s.expires_at > $2`, [tokenHash(token), now]);
   const row = result.rows[0] as { session_id?: string; admin_id?: string } | undefined;
