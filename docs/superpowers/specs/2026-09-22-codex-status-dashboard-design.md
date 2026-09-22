@@ -33,9 +33,9 @@
                        响应式 Web 面板
 ```
 
-技术栈：TypeScript、Next.js App Router（页面与 Route Handlers）、Node.js LTS、PostgreSQL；服务端以 Docker Compose 部署，HTTPS 由反向代理提供。计划基线为 Next.js 16.3.5、Node.js 24 LTS、PostgreSQL 17；安装时核验安全补丁并锁定依赖。
+技术栈：TypeScript、Next.js App Router（页面与 Route Handlers）、Node.js LTS、Vercel、托管 PostgreSQL。Vercel 部署 Web/API；额度 worker 与 Provider CLI 的持久授权运行在独立远程 Provider Runtime。计划基线为 Next.js 16.3.5、Node.js 24 LTS、PostgreSQL 17；安装时核验安全补丁并锁定依赖。
 
-所有对外业务 HTTP 接口由 Next.js 提供，不额外引入 Fastify。额度调度作为同项目内独立 Node.js worker 进程运行，共用服务端领域模块；不在 Route Handler、instrumentation 或 after 回调里启动周期任务。手动刷新只入持久请求队列，由 worker 消费。SSE 使用 PostgreSQL LISTEN/NOTIFY 通知失效，全量查询为真值；通知不承载敏感数据。
+所有 Web 和设备业务 HTTP 接口由 Next.js 提供，不额外引入 Fastify。额度调度作为独立 Node.js Provider worker 运行，共用领域模块；不在 Vercel Route Handler、instrumentation 或 after 回调里启动周期任务。手动刷新只入持久请求队列，由 worker 消费。SSE 使用 PostgreSQL LISTEN/NOTIFY 通知失效，全量查询为真值；通知不承载敏感数据。Vercel Functions 负责请求生命周期，不能假设其文件系统可持久保存 Codex/Kimi 登录态。
 
 Web 与服务端同源。首期一个服务实例即可，数据库管理事件和额度刷新锁，无需 Redis。设备端先覆盖 macOS、Linux，Windows 作为后续适配；这是当前平台假设，不影响上报协议。
 
@@ -214,7 +214,7 @@ Hook 写入器将最小事件原子写入本地持久队列，上传器收到服
 
 每张额度卡片展示 Provider、账号别名、实际返回的窗口或余额、重置时间、最近成功刷新时间、错误状态及手动刷新。没有值时显示不可用，不显示零。金额保留来源币种；重置时间按浏览器时区显示。
 
-Docker Compose 提供 Web/API、PostgreSQL 与必要的额度辅助运行时，持久化数据库和运行时授权目录。HTTPS 入口只开放 Web/API，数据库和辅助服务不开放公网。
+Vercel 提供 Web/API；托管 PostgreSQL 保存状态、快照与手动刷新队列。独立远程 Provider Runtime 使用容器运行额度 worker 和必要的 Kimi 辅助服务，持久化账号授权目录；Kimi 端口只监听容器 loopback，不开放公网。设备事件直接上报 Vercel API。
 
 首期采用单管理员登录、服务端会话 cookie（Secure、HttpOnly、SameSite）及写操作 CSRF 防护。设备使用单独可撤销 token，只允许事件和心跳写入，不能读取面板或额度。凭据以服务器权限受限的 secret 文件或运行时授权卷保存，不写入数据库快照、日志、镜像、Git 或浏览器响应。备份授权卷与数据库时保持访问控制。
 

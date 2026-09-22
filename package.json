@@ -13,6 +13,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "worker": "tsx src/worker/main.ts",
+    "provider-runtime": "tsx src/worker/provider-runtime.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "db:migrate": "tsx scripts/migrate.ts",

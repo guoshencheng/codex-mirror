@@ -4,9 +4,9 @@
 
 **Goal:** 交付登录保护、实时更新的远程 Web 面板及可恢复部署。
 
-**Architecture:** Next.js App Router 提供页面与只读 DTO API，Node Route Handler 用 PostgreSQL 通知推送 SSE 失效信号。worker 与 Next.js 分进程部署，共享 PostgreSQL；独立凭据卷仅挂到 worker。
+**Architecture:** Next.js App Router 部署到 Vercel，提供 Web、事件接收、管理员 API 与 SSE。托管 PostgreSQL 保存业务数据。额度 worker 与 Codex/Kimi 持久授权运行在独立远程 Provider Runtime；它共享 PostgreSQL，Vercel Functions 不运行常驻进程。
 
-**Tech Stack:** Next.js 16.3.5、React、TypeScript、pg、Playwright、Vitest、Docker Compose、Nginx。
+**Tech Stack:** Next.js 16.3.5、React、TypeScript、pg、Playwright、Vitest、Vercel、托管 PostgreSQL、Docker Compose（Provider Runtime only）。
 
 **Spec:** [设计](../specs/2026-09-22-codex-status-dashboard-design.md) §5–8；[执行索引](2026-09-22-codex-status-dashboard.md)。前置 P1/P2。
 
@@ -15,7 +15,7 @@
 - 所有对外业务 HTTP 接口由 Next.js 提供，不额外引入 Fastify。
 - Provider 额度由远程服务自行获取；设备端不查询、不转发额度。
 - 凭据留在服务器，设备仅持有自己的上报凭证。
-- Web 与服务端同源；首期一个服务实例即可，无需 Redis。
+- Web 与服务端同源；Vercel Functions 可水平扩展，无需 Redis。
 - 首期个人统一看板，不包含团队租户与角色权限。
 - 单管理员登录、服务端会话 cookie（Secure、HttpOnly、SameSite）及写操作 CSRF 防护。
 
@@ -25,7 +25,7 @@
 2. 断线、通知丢失、数据库连接重建仍恢复全量真值：T2。
 3. 前端缓存跨账号泄露、冻结的新鲜度标签：T2/T3。
 4. 缺失额度与零额度、多币种、多设备同账号：T3。
-5. Docker 重启、迁移失败、恢复备份不丢数据或重复启动 worker：T4。
+5. Vercel 冷启动/扩容、Provider Runtime 重启、迁移失败与恢复备份不丢数据或重复刷新：T4。
 
 ### Task 1: Administrator Authentication and Sessions
 
@@ -215,93 +215,36 @@ helpers 位于 `tests/e2e/helpers.ts`：loginAsTestAdmin 通过真实表单登�
 
 - [ ] **Step 5：通过组件测试与 Playwright，提交** `feat: build responsive status and quota dashboard`。
 
-### Task 4: Containers, Self-Hosting, and Acceptance
+### Task 4: Vercel Deployment, Provider Runtime, and Acceptance
 
-**Files:** 新建 `deploy/Dockerfile`、`Dockerfile.worker`、`compose.yaml`、`nginx.conf`、`supervisord.conf`、`config.example.json`、`.env.example`、`.dockerignore`、`src/app/api/health/route.ts`、`scripts/backup.sh`、`scripts/restore.sh`、`docs/deployment.md`、`docs/acceptance.md`、`tests/integration/retention.test.ts`、`tests/e2e/deployment.spec.ts`。
+**Files:** 新建 `vercel.json`、`deploy/Dockerfile.provider-runtime`、`deploy/compose.provider-runtime.yaml`、`deploy/provider-accounts.example.json`、`.env.example`、`.dockerignore`、`src/app/api/health/route.ts`、`scripts/backup.sh`、`scripts/restore.sh`、`docs/deployment.md`、`docs/acceptance.md`、`tests/integration/retention.test.ts`、`tests/e2e/deployment.spec.ts`。
 
-**Interfaces:** `GET /api/health` 仅返回 `{ok:boolean}` 不返回版本、账号或连接串；backup 接收输出目录，restore 接收归档路径及目标测试数据库。账号配置文件含 id/providerId/label/credentialRef/options，不含明文 secret。
+**Interfaces:** `GET /api/health` 仅返回 `{ok:boolean}`，不返回版本、账号或连接串。Provider Runtime 配置含 id/providerId/label/credentialRef/options，不含明文 secret。
 
-- [ ] **Step 1：先写保留策略与启动配置测试。** 使用真实 DB 插入 31 天事件、91 天额度历史、latest 和 stream 水位，运行清理函数后断言历史删除但 latest、水位、账号和会话保留。compose 静态校验要求只有 nginx 发布端口，不允许 web/worker/database 映射宿主端口，不允许凭据通过 NEXT_PUBLIC_* 暴露。
-- [ ] **Step 2：运行定向测试确认红灯；实现 worker 日清理和 health。** 每日清理在 worker 中执行，使用事务与清理锁；事件缺口尚待处理的记录不能随保留期静默删除，先标 stream incomplete 并记录安全诊断，避免永久悬挂被掩盖。session 未确认规则继续生效。
-- [ ] **Step 3：构建独立镜像。** web 多阶段 npm ci/build，仅复制 `.next/standalone`、`.next/static` 和 public，以非 root 运行。worker 编译独立入口，安装 P1-T2 验证过的固定 Codex/Kimi 运行时版本，持久化各账号独立目录，supervisor 在同容器管理本地 Kimi 服务和 worker；所有 Kimi 端口只绑定 127.0.0.1，Codex 使用 stdio。多账号分配固定独立目录与本地端口，启动前校验重复。版本来自验证记录，不在 Dockerfile 使用 latest。
+- [ ] **Step 1：先写保留策略与部署配置测试。** 使用真实 DB 插入 31 天事件、91 天额度历史、latest 和 stream 水位，运行清理函数后断言历史删除但 latest、水位、账号和会话保留。静态校验 Vercel build 不产出 standalone 镜像、不允许 secret 进入 `NEXT_PUBLIC_*`，Provider Runtime 不暴露 Kimi API 端口。
+- [ ] **Step 2：运行定向测试确认红灯；实现 worker 日清理和 health。** 每日清理在 Provider Runtime worker 中执行，使用事务与清理锁；事件缺口尚待处理的记录不能随保留期静默删除。Vercel health 不回显数据库错误或运行时配置。
+- [ ] **Step 3：准备 Vercel 与 Provider Runtime。** Vercel 项目从仓库根目录部署 Next.js，不设置 `output: standalone`；Web/API 环境变量使用托管 PostgreSQL serverless/pooler URL。Provider Runtime 使用独立 Docker Compose 和持久授权卷，共享托管 PostgreSQL，使用 direct URL 供 session advisory lock、迁移和 LISTEN。Codex 使用 stdio；Kimi 服务只监听 worker 容器 loopback。Vercel 仅托管 Web/API，不假设 serverless 文件系统可保存 Provider 登录目录。
 
 ```yaml
-# deploy/compose.yaml 的服务边界；实现时补入 Dockerfile 路径和健康检查
+# deploy/compose.provider-runtime.yaml；数据库由托管服务提供，Web 部署在 Vercel
 services:
-  web:
-    build: { context: '..', dockerfile: 'deploy/Dockerfile' }
-    environment:
-      DATABASE_URL: '${DATABASE_URL}'
-      APP_ORIGIN: '${APP_ORIGIN}'
-    depends_on:
-      db: { condition: service_healthy }
   worker:
-    build: { context: '..', dockerfile: 'deploy/Dockerfile.worker' }
+    build: { context: '..', dockerfile: 'deploy/Dockerfile.provider-runtime' }
     environment:
-      DATABASE_URL: '${DATABASE_URL}'
-      CONFIG_PATH: '/run/config/accounts.json'
+      DATABASE_URL: '${DATABASE_DIRECT_URL}'
+      PROVIDER_ACCOUNTS_FILE: '/run/config/accounts.json'
     volumes:
       - './accounts.json:/run/config/accounts.json:ro'
       - './secrets:/run/secrets:ro'
       - 'runtime-auth:/var/lib/dashboard-auth'
-  db:
-    image: postgres:17
-    environment:
-      POSTGRES_DB: dashboard
-      POSTGRES_USER: dashboard
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-    volumes:
-      - 'postgres-data:/var/lib/postgresql/data'
-      - './secrets/db_password:/run/secrets/db_password:ro'
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U dashboard -d dashboard']
-      interval: 5s
-      retries: 10
-  nginx:
-    image: nginx:stable
-    ports: ['80:80', '443:443']
-    volumes:
-      - './nginx.conf:/etc/nginx/conf.d/default.conf:ro'
-      - './tls:/etc/nginx/tls:ro'
-    depends_on: [web]
 volumes:
-  postgres-data:
   runtime-auth:
 ```
 
-上段是服务边界代码，最终镜像将 postgres/nginx 标签锁定到当次验证 digest；DATABASE_URL 从受限 env 文件提供，禁止写 Git。worker/web 生产使用 restart:unless-stopped，worker 健康检查基于其心跳状态文件，不调用 Provider。迁移用 worker 镜像一次性命令先执行，失败不启动新版本；不是让每个 web 实例自行迁移。
+- [ ] **Step 4：写 Vercel 部署、授权和备份恢复文档。** 从 Git 部署 Next.js 到 Vercel，配置 APP_ORIGIN、session secret、托管 PostgreSQL pooled URL；迁移以显式 release 命令运行。Vercel Cron 不承担五分钟额度刷新，调度由独立 Provider worker 完成。Provider Runtime 在服务器独立登录并持久化授权，不复制开发机 credential。管理员和设备初始化 CLI 在 worker 镜像执行，token 只显示一次。
+- [ ] **Step 5：完成产物检查与运行手册。** Provider Runtime 镜像固定 Codex/Kimi CLI 版本，包含 scripts/、migrations/、package.json 和 tsx；Kimi API 端口不映射公网。backup 使用 `pg_dump -Fc` 和受限授权卷备份（umask 077）；restore 默认恢复到新的测试数据库并检查 schema version，绝不自动覆盖生产库。Vercel region 与托管数据库 region 对齐，SSE Route Handler 设置有限 maxDuration 并允许浏览器自动重连。
+- [ ] **Step 6：执行完整验收并记录证据。** unit、integration、typecheck、Vercel production build、Playwright、Provider Runtime compose config；Vercel preview/production 冷启动都可读托管 DB；worker 重启不丢会话/额度且 advisory lock 避免重复刷新；关闭两台设备后 Provider Runtime 仍能查询额度；正常事件 5 秒内可见；未登录/设备 token 不能读 SSE；备份恢复到隔离库可读取既有状态。
 
-```nginx
-location /api/stream {
-    proxy_pass http://web:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_buffering off;
-    proxy_cache off;
-    proxy_read_timeout 75s;
-    gzip off;
-}
-```
+`docs/acceptance.md` 每条记录 PASS/FAIL/NOT_RUN、版本、时间和不含敏感信息的证据。三家真实账号、两台真实设备、Vercel 项目、Provider Runtime 主机缺任何一个，都单独列 NOT_RUN，不能以合成 fixtures 代替真实验收。
 
-其余 location 覆盖 X-Forwarded-For 为连接源地址，限制 body 256 KB，禁止缓存认证页面/API，HTTP 重定向 HTTPS；证书由部署环境提供并注明续期方式。额外代理层同样关闭 SSE 缓冲。构建 context 用 .dockerignore 排除 secrets、runtime、数据库和本地 env。
-
-- [ ] **Step 4：写启动/授权/备份恢复文档。**
-
-```sh
-docker compose -f deploy/compose.yaml build
-docker compose -f deploy/compose.yaml up -d db
-docker compose -f deploy/compose.yaml run --rm worker npm run db:migrate
-docker compose -f deploy/compose.yaml run --rm worker npm run admin:create
-docker compose -f deploy/compose.yaml up -d
-```
-
-worker 镜像必须包含 scripts/、migrations/、package.json 和运行这些命令所需的 tsx，不能只有 bundle。首次授权从服务器运行官方登录命令，持久化到运行时卷，不复制开发机凭据；真实命令以 P1 验证记录为准。创建/撤销设备 CLI 在 worker 容器运行，token 单次输出。
-
-backup 使用 `pg_dump -Fc` 和受限授权卷备份（umask 077）；restore 默认恢复到新的测试数据库并检查 schema version，绝不自动覆盖生产库。文档明确目标域名、TLS 路径、管理员创建、secret 权限和命令顺序；部署输入未提供时不能声称已远程部署。
-
-- [ ] **Step 5：执行完整验收并记录证据。** unit、integration、typecheck、build、Playwright、compose config；容器重启不丢会话/额度、worker 只有一个调度实例；关闭两台设备后服务器仍可查额度；正常事件 5 秒内可见；未登录/设备 token 不能读 SSE；退出后连接关闭；备份恢复到隔离库可读取既有状态。
-
-`docs/acceptance.md` 每条记录 PASS/FAIL/NOT_RUN、版本、时间和不含敏感信息的证据。三家真实账号、两台真实设备、目标服务器缺任何一个，都单独列 NOT_RUN，不能以合成 fixtures 代替真实验收。
-
-- [ ] **Step 6：提交** `feat: package dashboard for remote deployment`；全量审查最终 diff 与设计约束，用户审阅计划时选定的执行方法决定复核流程。无发布授权目标时交付可部署产物与操作文档，不擅自选择服务器或域名。
+- [ ] **Step 7：提交** `feat: deploy dashboard to Vercel with provider runtime`；全量审查最终 diff 与设计约束。没有用户提供的 Vercel 项目和 Runtime 主机时只交付可部署产物，不声称已发布。

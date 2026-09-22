@@ -4,9 +4,9 @@
 
 **Goal:** 用远程 Next.js 服务汇总各设备事件与三家 Provider 额度。
 
-**Architecture:** Next.js App Router 提供 Web、API 与 SSE；独立 worker 共享领域模块，在服务器获取额度。设备采集器仅持久化并上传 Codex 生命周期事件；PostgreSQL 保存状态、额度、刷新请求和管理会话。
+**Architecture:** Next.js App Router 部署到 Vercel，提供 Web、事件/API 与 SSE；PostgreSQL 使用托管服务。独立 Provider worker 部署在有持久存储的远程运行时，共享领域模块并获取 Codex、DeepSeek、Kimi Code 额度；设备采集器仅持久化并上报 Codex 生命周期事件。
 
-**Tech Stack:** Next.js 16.3.5、React、TypeScript strict、Node.js 24 LTS、PostgreSQL 17、pg、Zod、Vitest、Playwright、Docker Compose。Node/Next 安装时核验安全补丁；全部依赖使用精确版本和 lockfile。不引入独立 API 框架、Redis、任务轮询或 Serverless 调度。
+**Tech Stack:** Next.js 16.3.5、React、TypeScript strict、Node.js 24 LTS、Vercel、托管 PostgreSQL 17、pg、Zod、Vitest、Playwright、Docker Compose（仅 Provider Runtime）。Node/Next 安装时核验安全补丁；全部依赖使用精确版本和 lockfile。不引入独立 API 框架、Redis 或 Codex 执行状态轮询。
 
 **Spec:** [已批准设计及 Next.js 调整](../specs/2026-09-22-codex-status-dashboard-design.md)
 
@@ -39,7 +39,7 @@
 | --- | --- | --- |
 | 1 | [Provider 服务](2026-09-22-dashboard-01-providers.md) | 注册策略可查询三家额度；worker 可持续刷新并保存快照 |
 | 2 | [设备事件链路](2026-09-22-dashboard-02-events.md) | 两台采集器可上报，服务端可准确归约、断网补报 |
-| 3 | [Next.js 面板与部署](2026-09-22-dashboard-03-web-deploy.md) | 登录、实时面板、手机布局、远程容器部署和恢复演练 |
+| 3 | [Next.js 面板与部署](2026-09-22-dashboard-03-web-deploy.md) | 登录、实时面板、手机布局、Vercel 部署及 Provider Runtime 联通 |
 
 各子计划都读取本索引与设计文档。先完成 P1-T1/T2 的契约与可行性验证，再实现真实策略。某一家真实授权未就绪时，可继续不依赖该授权的单元测试和事件/UI 工作，但不能声称三家已接入或用模拟数据冒充成功。
 
@@ -61,7 +61,7 @@ codex-status-dashboard/
   scripts/                    配置校验、管理员/设备初始化、采集器安装
   migrations/                 版本化 SQL
   tests/                      单元、PostgreSQL 集成、浏览器验收
-  deploy/                     Dockerfile、Compose、反向代理与辅助进程
+  deploy/                     Vercel 配置、Provider Runtime 容器与启动说明
   docs/                       接入、版本验证和部署说明
 ```
 
@@ -102,9 +102,11 @@ Worker/collector 入口在各自任务创建；此前用 `next build` 检查 Nex
 
 ## 技术依据与实现边界
 
-Next.js Route Handlers 使用 Node runtime 和标准 Request/Response，SSE 可使用流式响应。自托管需关闭反向代理流缓冲。出处：[Route Handlers](https://nextjs.org/docs/app/api-reference/file-conventions/route)、[Self-hosting](https://nextjs.org/docs/app/guides/self-hosting)。文档与 npm registry 在 2026-09-22 核对到 Next.js 16.3.5。
+Next.js Route Handlers 使用 Node runtime 和标准 Request/Response，SSE 可使用流式响应。出处：[Route Handlers](https://nextjs.org/docs/app/api-reference/file-conventions/route)、[Vercel streaming](https://vercel.com/docs/functions/streaming-functions)。文档与 npm registry 在 2026-09-22 核对到 Next.js 16.3.5。
 
-定时 worker 与 Next.js 进程分离是本项目的持久调度设计选择，不是 Next.js 缺少 HTTP 能力。不要把后台任务挂在请求生命周期、`after()`、`instrumentation` 或客户端页面上。
+Web、登录会话与设备事件接收运行在 Vercel Functions。额度 worker 不运行在 Vercel：Codex App Server 与 Kimi Code Server API 依赖持久授权目录/本地运行时，需要在远程 Provider Runtime 中运行；它与 Vercel Web 共用托管 PostgreSQL，并通过账号 advisory lock 协调。部署文档必须把 Vercel 项目与 Runtime 分开说明。不要把后台任务挂在 Vercel 请求生命周期、`after()`、`instrumentation` 或客户端页面上。SSE Route Handler 设置有限 maxDuration 并允许浏览器自动重连。
+
+Vercel 当前 Cron 限制：Hobby 最多每天一次，Pro/Enterprise 可每分钟调度；本项目五分钟额度刷新不依赖 Cron，使用独立 Provider worker。参考：[Vercel Cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing)、[Function duration](https://vercel.com/docs/functions/configuring-functions/duration)、[Streaming](https://vercel.com/docs/functions/streaming-functions)。
 
 ## 执行交接
 

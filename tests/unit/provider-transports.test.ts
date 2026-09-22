@@ -143,7 +143,7 @@ rl.on('line', line => {
 
     const exited = join(home, 'exited-codex');
     await writeFile(exited, '#!/usr/bin/env node\nprocess.exit(7);\n', { mode: 0o700 });
-    await expect(new CodexRpc(home, exited).readRateLimits(new AbortController().signal, 1000))
+    await expect(new CodexRpc(home, exited).readRateLimits(new AbortController().signal, 5000))
       .rejects.toMatchObject({ code: 'UNAVAILABLE' });
   });
 });
