@@ -109,7 +109,7 @@ sequence <= lastSequence 原样返回。不同 turnId 的工具/停止/中断事
 
 **Interfaces:** `openQueue(path, maxBytes=100_000_000)` 返回 `append(eventWithoutIds): AgentEvent`、`peek(limit): AgentEvent[]`、`ack(epoch, contiguousSequence): void`、`health()`、`close()`；sequence/epoch/deviceId 由队列补齐。`normalizeHook(raw): Omit<AgentEvent,'eventId'|'sequence'|'collectorEpoch'|'deviceId'>|null`；`uploadOnce(queue, transport): Promise<void>`；`collector hook` 从 stdin 读 JSON，`collector run` 运行上传和心跳，`collector install --dry-run` 展示合并后的 Hook 配置。
 
-- [ ] **Step 1：安装 SQLite 依赖并写队列/重试测试。** 使用 better-sqlite3 精确版本，开发类型加入 lockfile；不把原生模块打包进 JS，tsup 标记 external。
+- [x] **Step 1：安装 SQLite 依赖并写队列/重试测试。** 使用 better-sqlite3 精确版本，开发类型加入 lockfile；不把原生模块打包进 JS，tsup 标记 external。
 
 ```ts
 it('retains identical IDs until contiguous acknowledgment', async () => {
@@ -128,8 +128,8 @@ it('retains identical IDs until contiguous acknowledgment', async () => {
 });
 ```
 
-- [ ] **Step 2：运行** collector 三个定向测试文件，确认红灯。
-- [ ] **Step 3：实现 SQLite 队列。**
+- [x] **Step 2：运行** collector 三个定向测试文件，确认红灯。
+- [x] **Step 3：实现 SQLite 队列。**
 
 ```sql
 PRAGMA journal_mode=WAL;
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS pending (
 
 append 在 BEGIN IMMEDIATE 内分配单调 sequence、UUID eventId、写入 payload 和累计字节，commit 后返回。并发 Hook 使用同一库；busy 超时不拖住主任务，在独立小型 health 文件原子记录 eventLoss=true。100 MB 同时检查逻辑待传量和数据库/WAL 实际占用；checkpoint 增量回收，达到上限拒绝新事件并报告，不删除未 ack 事件。epoch 在正常重启保持不变；仅清空/重装队列才创建新 epoch。磁盘满时尽力 stderr 输出固定安全错误，Hook exit 0 以免影响 Codex。
 
-- [ ] **Step 4：实现 Hook 白名单、项目归一化和安装。** stdin 上限 1 MB，本地提取允许字段后原始数据立即丢弃；未知 Hook 名返回 null。按设计状态表映射，工具响应和命令正文不入队。Git remote 只在首次遇到 cwd 时用参数数组查询并缓存，移除 username/password/query/fragment；scp 和 HTTPS remote 规范化同一个 host/path，去 `.git`。无 remote 用 SHA-256(deviceId+realpath(cwd))；不上传完整路径。
+- [x] **Step 4：实现 Hook 白名单、项目归一化和安装。** stdin 上限 1 MB，本地提取允许字段后原始数据立即丢弃；未知 Hook 名返回 null。按设计状态表映射，工具响应和命令正文不入队。Git remote 只在首次遇到 cwd 时用参数数组查询并缓存，移除 username/password/query/fragment；scp 和 HTTPS remote 规范化同一个 host/path，去 `.git`。无 remote 用 SHA-256(deviceId+realpath(cwd))；不上传完整路径。
 
 ```ts
 const hookTypes = {
@@ -155,13 +155,13 @@ const hookTypes = {
 } as const;
 ```
 
-安装器先检查目标版本支持的 Hook schema，合并用户现有配置并备份；只改自己标记的 hook 项，重复安装不重复，卸载只移除自己项，不静默覆盖其他 Hooks。配置采用非阻塞 Hook 能力，以实机验证版本支持为准；不得返回 allow/deny。macOS 提供用户 launchd，Linux 提供 systemd --user；含空格路径必须正确参数化。
+安装器先检查目标版本支持的 Hook schema，合并用户现有配置并备份；只改自己标记的 hook 项，重复安装不重复，卸载只移除自己项，不静默覆盖其他 Hooks。事件 Hook 只做有上限的本地 SQLite 写入，使用同步处理来保持事件序列顺序；绝不在 Hook 中联网或返回审批决定。`SessionEnd` 始终同步，Hook 输出不得带提示词或工具内容；`Stop` 始终返回 `{"continue":true}`。安装后提示用户在 `/hooks` 审查并信任。macOS 提供用户 launchd，Linux 提供 systemd --user；含空格路径必须正确参数化。
 
-- [ ] **Step 5：实现上传和健康心跳。** 只访问配置的 HTTPS 服务，同一 epoch 按序批量 <=100 条/256 KB；只有服务端返回匹配 epoch 和 <=已发送范围的连续 ack 才删除。网络失败 1 秒至 60 秒抖动退避；401/403 暂停上报并保留队列。413 自动缩小批次，单条协议拒绝不跳过，标记受阻。心跳每 20 秒发送 epoch、queueDepth、eventLoss，不读进程或会话。
+- [x] **Step 5：实现上传和健康心跳。** 只访问配置的 HTTPS 服务，同一 epoch 按序批量 <=100 条/256 KB；只有服务端返回匹配 epoch 和 <=已发送范围的连续 ack 才删除。网络失败 1 秒至 60 秒抖动退避；401/403 暂停上报并保留队列。413 自动缩小批次，单条协议拒绝不跳过，标记受阻。心跳每 20 秒发送 epoch、queueDepth、eventLoss，不读进程或会话。
 
 重连握手增加 `bootId`（每次采集器启动随机生成）与 `queuedThrough`（此时本地最大序号）。首次联网、bootId 变化或服务端已判离线时，先发心跳注册恢复水位，再上传积压事件；这些历史事件可以更新最后已知状态，但不能重新确认活跃执行。只有恢复水位之后的新事件可以确认状态，防止旧 WORKING 补报被误认为现在仍在工作。心跳失败则继续留队，不提前上传恢复流。
 
-- [ ] **Step 6：补齐队列上限、并发写、ack 越界、假 server ack、安装幂等和脱敏测试；提交** `feat: add durable event-only device collector`。目标 macOS/Linux 各验证一轮 Hook，不修改用户工作会话来制造审批，使用临时测试项目。
+- [x] **Step 6：补齐队列上限、并发写、ack 越界、假 server ack、安装幂等和脱敏测试；提交** `feat: add durable event-only device collector`。临时 Hook CLI/SQLite 集成测试已通过；尚未在 Linux 主机和用户实际 Codex 会话中安装验证。没有修改现有 Codex Hook 配置。
 
 ### Task 3: Next.js Ingest Routes, Ordered Streams, and Device Registration
 
