@@ -97,7 +97,7 @@ Next 初始页面只显示“尚未接入数据”，不填假数据；布局使
 
 ### Task 2: Server Authorization, Transports, and Secret Boundaries
 
-**Files:** 新建 `src/server/providers/secret-store.ts`、`http.ts`、`codex/rpc.ts`、`kimi-code/client.ts`、`scripts/probe-providers.ts`、`docs/provider-verification.md`、`tests/unit/provider-transports.test.ts`、`tests/fixtures/providers/`。
+**Files:** 新建 `src/server/providers/secret-store.ts`、`http.ts`、`codex/rpc.ts`、`kimi-code/client.ts`、`docs/provider-verification.md`、`tests/unit/provider-transports.test.ts`、`tests/fixtures/providers/`。
 
 **Interfaces:** `FileSecretStore(root).read(ref): Promise<string>`；仅 ref 的相对文件名，realpath 必须仍在 root 内。`requestJson(url, {signal, headers, timeoutMs}): Promise<unknown>` 禁止重定向并限制响应 1 MB；失败抛 `ProviderTransportError`，仅携带设计中的 code/retryAfterSeconds。`CodexRpc(home).readRateLimits(signal): Promise<unknown>` 管理一个 home 对应的 stdio 子进程；`KimiUsageClient(baseUrl, token).readUsage(signal): Promise<unknown>`。
 
@@ -136,7 +136,9 @@ Codex 使用 child_process.spawn 的参数数组，禁止 shell；独立 CODEX_H
 
 Kimi 只允许部署配置中的回环地址，附 bearer token，请求 `/api/v1/oauth/usage`；检查 HTTP 和 JSON envelope 的 `code` 及 `data.kind`，HTTP 200 内的上游错误也要失败。Kimi 登录及运行时配置分别以权限 0700 目录持久化。
 
-- [ ] **Step 4：在目标 Linux 环境验证真实数据源。** 先记录 `codex --version`、`codex app-server --help`、`kimi --version`、`kimi web --help`，依据当时安装版本选择官方支持的服务器登录方式；用户通过官方流程授权，不在聊天粘贴 token。DeepSeek 以只读 secret 文件配置 API Key。probe 只输出 providerId、ok/errorCode、metricCount、observedAt，绝不输出原始响应。
+- [ ] **Step 4：验证 CLI 与记录远程探测。** 记录本地可用 CLI 版本和帮助输出；将 `/user/balance`、Codex JSON-RPC schema、Kimi Code server usage 契约与回环鉴权要求写入 `docs/provider-verification.md`。真实远程服务器探测由 Task 3 的统一策略 probe 在部署授权后执行；不读取开发机凭据，不在聊天粘贴 token。
+
+具备目标 Linux 服务器和受支持授权后执行：
 
 ```sh
 npm run providers:probe -- --provider deepseek
@@ -144,7 +146,7 @@ npm run providers:probe -- --provider codex
 npm run providers:probe -- --provider kimi-code
 ```
 
-probe 参数 provider 仅允许这三个固定值；内部使用相应传输，账号从只读配置读取。还要重启运行时后再次查询，记录授权是否恢复、续期方式及服务端独立查询证据。将脱敏结构手工生成合成 fixtures，不保存真实标识符。缺少服务器/授权就记录 NOT_RUN 和具体需要的输入，不写“通过”；不阻塞无关模块开发。
+策略探测参数 provider 仅允许这三个固定值；通过统一策略、只读账号配置和 secret store 查询。还要重启运行时后再次查询，记录授权是否恢复、续期方式及服务端独立查询证据。将脱敏结构手工生成合成 fixtures，不保存真实标识符。缺少服务器/授权就记录 NOT_RUN 和具体需要的输入，不写“通过”；不阻塞无关模块开发。
 
 - [ ] **Step 5：运行传输测试与 typecheck；提交** `feat: add server-side provider transports`。只有三家真实验证完成，才能将本阶段标记为 live-ready。
 
