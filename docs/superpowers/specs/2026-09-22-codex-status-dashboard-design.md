@@ -92,6 +92,7 @@ interface BalanceMetric {
   total: string;              // 十进制金额字符串，禁止浮点汇总
   granted: string | null;
   toppedUp: string | null;
+  details?: readonly { key: string; label: string; value: string }[];
 }
 
 type QuotaMetric = QuotaWindowMetric | BalanceMetric;

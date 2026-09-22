@@ -32,6 +32,7 @@ export interface BalanceMetric {
   total: string;
   granted: string | null;
   toppedUp: string | null;
+  details?: readonly { key: string; label: string; value: string }[];
 }
 
 export type QuotaMetric = QuotaWindowMetric | BalanceMetric;
