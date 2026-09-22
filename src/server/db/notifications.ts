@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { createDirectDatabasePool } from './pool';
+import { createSessionDatabasePool } from './pool';
 
 export type DashboardNotification = { type: 'sync' } | { type: 'invalidate'; topic: 'events' | 'heartbeat' | 'quota' };
 export type NotificationListener = (notification: DashboardNotification) => void;
@@ -130,12 +130,12 @@ export class PgNotificationHub {
   }
 }
 
-let directPool: Pool | undefined;
+let sessionPool: Pool | undefined;
 let defaultHub: PgNotificationHub | undefined;
 
 export function notificationDatabasePool(): Pool {
-  directPool ??= createDirectDatabasePool();
-  return directPool;
+  sessionPool ??= createSessionDatabasePool();
+  return sessionPool;
 }
 
 export function notificationHub(): PgNotificationHub {

@@ -57,7 +57,7 @@ export default function Dashboard({ initial }: DashboardProps) {
       <h2 className="ds-panel-title" id="quota-heading">Provider 额度</h2>
       {data.accounts.length > 0
         ? <div className="ds-metric-grid">
-          {data.accounts.map(account => <QuotaCard key={account.id} account={account} onRefresh={refreshQuota} />)}
+          {data.accounts.map(account => <QuotaCard key={account.id} account={account} now={now} onRefresh={refreshQuota} />)}
         </div>
         : <p className="ds-constraint">尚未配置额度账号</p>}
     </section>

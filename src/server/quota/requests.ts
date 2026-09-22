@@ -7,14 +7,12 @@ export async function requestRefresh(accountId: string, now: Date, pool: Pool): 
   let ownsProbeLock = false;
   try {
     await client.query('BEGIN');
-    const lock = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked', [accountId]);
+    const lock = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0)) AS locked', [accountId]);
     ownsProbeLock = Boolean(lock.rows[0]?.locked);
     if (!ownsProbeLock) {
       await client.query('COMMIT');
       return 'running';
     }
-    await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [accountId]);
-    ownsProbeLock = false;
     const result = await client.query(`
       SELECT a.enabled, s.last_manual_at
       FROM provider_accounts a JOIN quota_refresh_status s ON s.account_id = a.id
@@ -41,7 +39,6 @@ export async function requestRefresh(accountId: string, now: Date, pool: Pool): 
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
-    if (ownsProbeLock) await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [accountId]).catch(() => undefined);
     client.release();
   }
 }

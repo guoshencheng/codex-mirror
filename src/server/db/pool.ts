@@ -10,3 +10,8 @@ export function createDirectDatabasePool(): Pool {
   if (!connectionString) throw new Error('DATABASE_DIRECT_URL_REQUIRED');
   return createDatabasePool(connectionString);
 }
+
+export function createSessionDatabasePool(connectionString = process.env.DATABASE_SESSION_URL): Pool {
+  if (!connectionString) throw new Error('DATABASE_SESSION_URL_REQUIRED');
+  return new Pool({ connectionString, max: 6, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
+}

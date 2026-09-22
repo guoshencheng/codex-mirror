@@ -8,22 +8,23 @@ Next.js Web/API 部署到 Vercel；托管 PostgreSQL 保存业务状态；独立
 | --- | --- | --- |
 | Vercel | `APP_ORIGIN` | 面板公开 HTTPS 来源，登录和 CSRF 校验使用 |
 | Vercel | `DATABASE_URL` | 托管 PostgreSQL 的 serverless/pooler URL |
+| Vercel | `DATABASE_SESSION_URL` | SSE 的 session-compatible URL，需支持 `LISTEN` 与 session advisory lock；限制每个函数实例的连接池为 6 |
 | 发布/运维 shell | `DATABASE_DIRECT_URL` | 直连数据库，用于 migration、初始化 CLI、worker、备份和恢复 |
 | Provider Runtime | `deploy/provider-accounts.json` | Provider 账号别名、策略 ID 和 secret 文件引用，不存放凭据 |
 | Provider Runtime | `deploy/secrets/*` | DeepSeek API Key、Kimi server bearer token；容器只读挂载 |
 | Provider Runtime | Docker named volume `codex-status-dashboard-provider-runtime-auth` | Codex 分账号登录目录及 Kimi Code 持久配置/授权 |
 
-从 `.env.example` 复制出本地 `.env`，设置生产域名和数据库连接。`DATABASE_URL` 必须使用托管服务为 serverless/Web 推荐的 pooled URL；`DATABASE_DIRECT_URL` 必须用 provider runtime、运维 shell 能访问的 direct URL，并按数据库服务要求启用 TLS。将 `APP_ORIGIN` 设为面板的精确 HTTPS origin，不带路径。不要把 `DATABASE_DIRECT_URL` 配到 Vercel，也不要把池化 URL 配给使用 session advisory lock 的 worker。
+从 `.env.example` 复制出本地 `.env`，设置生产域名和数据库连接。`DATABASE_URL` 必须使用托管服务为 serverless/Web 推荐的 pooled URL；`DATABASE_SESSION_URL` 必须使用支持持久会话、`LISTEN` 和 session advisory lock 的连接（direct URL 或 session-mode pooler），供 Vercel SSE stream 使用；不能使用 transaction-mode pooler。`DATABASE_DIRECT_URL` 必须用 provider runtime、运维 shell 能访问的 direct URL，并按数据库服务要求启用 TLS。将 `APP_ORIGIN` 设为面板的精确 HTTPS origin，不带路径。不要把 worker 使用的 `DATABASE_DIRECT_URL` 配到 Vercel，也不要把 transaction pooler 配给 SSE 或使用 advisory lock 的 worker。
 
 ## Vercel 部署
 
 1. 从 Git 导入仓库，Project Root Directory 保持仓库根目录，Framework 使用 Next.js 默认配置；仓库内的 `vercel.json` 已声明 `framework: nextjs`。不要设置 `output: standalone`，也不要把 Provider Runtime 当成 Vercel Function。
-2. 在 Vercel 项目环境变量中配置 `APP_ORIGIN` 和 pooled `DATABASE_URL`。登录/CSRF 校验严格匹配固定 `APP_ORIGIN`，不会动态信任请求的 `Host` 或 `VERCEL_URL`。Production 使用稳定的生产域名；Preview 需绑定稳定的 Preview/branch domain，并为 Preview 环境设置与其完全一致的 `APP_ORIGIN`。不要让每次部署变化的随机 URL 共用 Production origin，也不要设置 `NEXT_PUBLIC_*` 数据库或 Provider 凭据。
+2. 在 Vercel 项目环境变量中配置 `APP_ORIGIN`、pooled `DATABASE_URL` 和 session-compatible `DATABASE_SESSION_URL`。登录/CSRF 校验严格匹配固定 `APP_ORIGIN`，不会动态信任请求的 `Host` 或 `VERCEL_URL`。Production 使用稳定的生产域名；Preview 需绑定稳定的 Preview/branch domain，并为 Preview 环境设置与其完全一致的 `APP_ORIGIN`。不要让每次部署变化的随机 URL 共用 Production origin，也不要设置 `NEXT_PUBLIC_*` 数据库或 Provider 凭据。
 3. 将 Vercel Functions region 与托管数据库 region 对齐，减少数据库往返延迟。Region 需按实际数据库位置在 Vercel 项目设置中选择，本仓库不猜测具体区域。
 4. 每次需要新增 schema 时，从受限的发布环境显式运行 `npm run db:migrate`，该命令使用 `DATABASE_DIRECT_URL`。不要把 migration 隐式放进 Web Function 冷启动。
 5. 首次发布后访问 `https://<面板域名>/api/health`。它只返回 `{ "ok": true }`，用于进程存活探测，不回显数据库错误或环境变量。完成管理员初始化后，测试登录、设备上报和面板读取。
 
-`vercel.json` 为流式 API 配置最多 60 秒单次执行时间，让浏览器有机会通过 SSE 自动重连。Vercel 函数不是常驻服务；额度刷新每 5 分钟由远程 Provider Runtime 完成，不建立 5 分钟 Vercel Cron。Vercel Cron 的频率依计划类型受限，且无论如何不应承载需要持久 CLI 登录目录的工作进程。
+`vercel.json` 为流式 API 配置最多 60 秒单次执行时间，让浏览器有机会通过 SSE 自动重连。每个暖实例最多为 SSE/session 查询建立 6 个 session connections；托管数据库或 session pooler 需设置足够的并发连接预算。Vercel 函数不是常驻服务；额度刷新每 5 分钟由远程 Provider Runtime 完成，不建立 5 分钟 Vercel Cron。Vercel Cron 的频率依计划类型受限，且无论如何不应承载需要持久 CLI 登录目录的工作进程。
 
 ## Provider Runtime 准备
 

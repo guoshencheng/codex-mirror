@@ -37,6 +37,7 @@ describe('deployment artifacts', () => {
     expect(accounts).toContain('credentialRef');
     expect(accounts).not.toMatch(/(sk-[A-Za-z0-9]{12,}|Bearer\s+\S+)/i);
     expect(env).toContain('DATABASE_URL=');
+    expect(env).toContain('DATABASE_SESSION_URL=');
     expect(env).toContain('DATABASE_DIRECT_URL=');
     expect(env).not.toMatch(/NEXT_PUBLIC_(?:DATABASE|PROVIDER|CODEX|DEEPSEEK|KIMI)/i);
     expect(env).not.toMatch(/(sk-[A-Za-z0-9]{12,}|refresh_token\s*=\s*[^<])/i);
@@ -50,6 +51,13 @@ describe('deployment artifacts', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
     expect(response.headers.get('cache-control')).toContain('no-store');
+  });
+
+  it('documents the session-compatible Vercel SSE connection separately from worker credentials', async () => {
+    const deployment = await read('docs/deployment.md');
+    expect(deployment).toContain('`DATABASE_SESSION_URL`');
+    expect(deployment).toContain('transaction-mode pooler');
+    expect(deployment).toContain('不要把 worker 使用的 `DATABASE_DIRECT_URL` 配到 Vercel');
   });
 
   it('documents a pinned Kimi CLI token flow without printing or passing the bearer token in an environment variable', async () => {

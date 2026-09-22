@@ -54,7 +54,7 @@ const sessions: DashboardSession[] = [
 describe('dashboard display cards', () => {
   it('renders normalized account metrics without provider-specific branches and refreshes by account id', () => {
     const onRefresh = vi.fn();
-    render(<QuotaCard account={account} onRefresh={onRefresh} />);
+    render(<QuotaCard account={account} now={new Date('2026-09-22T10:10:00.000Z')} onRefresh={onRefresh} />);
 
     expect(screen.getByText('new-provider')).toBeInTheDocument();
     expect(screen.getByText('0.00000001', { exact: true })).toBeInTheDocument();

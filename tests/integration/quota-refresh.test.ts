@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Pool } from 'pg';
 import { QuotaRepository } from '../../src/server/quota/repository';
 import { runAccountRefresh } from '../../src/server/quota/refresh';
 import { requestRefresh } from '../../src/server/quota/requests';
@@ -18,6 +19,43 @@ function strategy(fetch: () => Promise<ProviderFetchResult>): QuotaProviderStrat
     id: 'fake', capabilities: { metricKinds: ['balance'], authModes: ['api-key'] },
     validateConfig: () => [], fetchSnapshot: fetch,
   };
+}
+
+function instrumentPool(
+  pool: Pool,
+  hooks: {
+    before?(sql: string): void | Promise<void>;
+    after?(sql: string, result: { rows?: unknown[] }): void | Promise<void>;
+  },
+): Pool {
+  return new Proxy(pool, {
+    get(target, property, receiver) {
+      if (property !== 'connect') {
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      return async () => {
+        const client = await target.connect();
+        return new Proxy(client, {
+          get(clientTarget, clientProperty, clientReceiver) {
+            if (clientProperty !== 'query') {
+              const value = Reflect.get(clientTarget, clientProperty, clientReceiver);
+              return typeof value === 'function' ? value.bind(clientTarget) : value;
+            }
+            return async (...args: unknown[]) => {
+              const input = args[0];
+              const sql = typeof input === 'string' ? input : typeof input === 'object' && input !== null && 'text' in input
+                ? String(input.text) : '';
+              await hooks.before?.(sql);
+              const result = await Reflect.apply(Reflect.get(clientTarget, 'query'), clientTarget, args as any[]);
+              await hooks.after?.(sql, result as { rows?: unknown[] });
+              return result;
+            };
+          },
+        });
+      };
+    },
+  });
 }
 
 describe('PostgreSQL-backed quota refresh', () => {
@@ -92,6 +130,67 @@ describe('PostgreSQL-backed quota refresh', () => {
       expect(await runAccountRefresh(config.id, deps)).toBe('failed');
       expect((await repository.readLatest(config.id)).nextAttemptAt).toBe('2100-01-01T00:02:00.000Z');
       expect(await runAccountRefresh(config.id, deps)).toBe('not-due');
+    });
+  });
+
+  it('keeps a manual request serialized with a due worker refresh', async () => {
+    await withTestDb(async db => {
+      const repository = new QuotaRepository(db.pool);
+      await repository.upsertConfiguredAccounts([config]);
+      await db.pool.query("UPDATE quota_refresh_status SET next_attempt_at = '2000-01-01T00:00:00Z' WHERE account_id = $1", [config.id]);
+
+      let continueManual!: () => void;
+      let manualAtRowLock!: () => void;
+      const manualGate = new Promise<void>(resolve => { continueManual = resolve; });
+      const manualPaused = new Promise<void>(resolve => { manualAtRowLock = resolve; });
+      const manualPool = instrumentPool(db.pool, {
+        after: async sql => {
+          if (/SELECT\s+a\.enabled,\s*s\.last_manual_at/i.test(sql)) {
+            manualAtRowLock();
+            await manualGate;
+          }
+        },
+      });
+      const manual = requestRefresh(config.id, new Date('2026-09-22T00:00:00Z'), manualPool);
+      await manualPaused;
+
+      let reportWorkerLock!: (locked: boolean) => void;
+      let reportWorkerUpdate!: () => void;
+      const workerLock = new Promise<boolean>(resolve => { reportWorkerLock = resolve; });
+      const workerUpdate = new Promise<void>(resolve => { reportWorkerUpdate = resolve; });
+      const workerPool = instrumentPool(db.pool, {
+        before: sql => {
+          if (/UPDATE\s+quota_refresh_status\s+SET\s+last_attempt_at/i.test(sql)) reportWorkerUpdate();
+        },
+        after: (sql, result) => {
+          if (/pg_try_advisory_(?:xact_)?lock/i.test(sql)) {
+            const row = result.rows?.[0] as { locked?: boolean } | undefined;
+            reportWorkerLock(Boolean(row?.locked));
+          }
+        },
+      });
+      let providerCalls = 0;
+      const deps = {
+        pool: workerPool,
+        repository,
+        strategy: strategy(async () => {
+          providerCalls += 1;
+          return { ok: true, snapshot: snapshot() };
+        }),
+        now: () => new Date('2026-09-22T00:00:00Z'),
+        jitter: () => 0,
+      };
+      const firstWorker = runAccountRefresh(config.id, deps);
+      const workerHeldLock = await workerLock;
+      if (workerHeldLock) await workerUpdate;
+      else expect(await firstWorker).toBe('locked');
+
+      continueManual();
+      expect(await manual).toBe('queued');
+      if (workerHeldLock) expect(await firstWorker).toBe('success');
+
+      expect(await runAccountRefresh(config.id, deps)).toBe('success');
+      expect(providerCalls).toBe(1);
     });
   });
 });
