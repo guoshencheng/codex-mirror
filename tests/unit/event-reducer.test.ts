@@ -20,6 +20,15 @@ describe('session state reducer', () => {
     expect(late.lastSequence).toBe(3);
   });
 
+  it('does not reopen a stopped turn when a later-arriving tool hook belongs to it', () => {
+    const started = reduceSession(null, event(1, 'turn.started', 't1'), received);
+    const stopped = reduceSession(started, event(2, 'turn.stopped', 't1'), received);
+    const delayedTool = reduceSession(stopped, event(3, 'tool.started', 't1', { toolName: 'terminal' }), received);
+    expect(delayedTool.state).toBe('STOPPED');
+    expect(delayedTool.currentTool).toBeNull();
+    expect(delayedTool.confidence).toBe('unconfirmed');
+  });
+
   it('maps lifecycle events without calling Stop success', () => {
     let state: SessionState | null = null;
     const cases: Array<[EventType, SessionState['state']]> = [

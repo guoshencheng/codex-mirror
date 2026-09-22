@@ -13,6 +13,7 @@ const stateByEvent: Readonly<Record<EventType, SessionState['state']>> = {
 
 const activeStates = new Set<SessionState['state']>(['WORKING', 'WAITING_APPROVAL']);
 const terminalTurnEvents = new Set<EventType>(['turn.stopped', 'turn.interrupted']);
+const lateWorkEvents = new Set<EventType>(['tool.started', 'tool.finished', 'approval.requested']);
 
 function initialState(event: AgentEvent, receivedAt: string): SessionState {
   const confirmed = event.type === 'session.started' || (event.type === 'turn.started' && event.turnId !== null);
@@ -56,6 +57,11 @@ export function reduceSession(previous: SessionState | null, event: AgentEvent, 
     return withEvent(previous, event, receivedAt, {
       state: 'IDLE', turnId: null, confidence: previous.confidence, currentTool: null,
     });
+  }
+
+  // A delayed tool/approval hook must not resurrect a turn after a terminal event.
+  if (lateWorkEvents.has(event.type) && ['STOPPED', 'INTERRUPTED', 'ENDED'].includes(previous.state)) {
+    return withEvent(previous, event, receivedAt, { confidence: 'unconfirmed', currentTool: null });
   }
 
   if (event.type !== 'session.ended' && event.turnId !== null && previous.turnId !== null && event.turnId !== previous.turnId) {
