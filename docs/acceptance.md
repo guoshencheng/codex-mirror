@@ -10,6 +10,8 @@
 | Health endpoint 不缓存且不回显配置或数据库错误 | PASS | Route Handler 单测 |
 | 事件保留清理仅删 30 天前已应用事件，并保留待确认事件、当前 turn 起点和状态表 | PASS | PostgreSQL integration test；同测验证 90 天 quota history 清理且 quota latest 保留 |
 | 备份/恢复脚本结构检查 | PASS | shell 语法与静态检查；未对真实数据执行 |
+| 全量单元测试、数据库集成测试、类型检查、生产构建、采集器构建与依赖审计 | PASS | 2026-09-22：unit 22 文件/117 测试，integration 7 文件/31 测试，build/typecheck/collector build 通过，npm audit 0 vulnerabilities |
+| 本地浏览器端到端流程 | PASS | 2026-09-22：Playwright 2/2；登录、未登录跳转、真实事件 API 上报、SSE invalidation/重连、设备离线状态和 390px 无横向溢出；使用隔离测试 schema 与合成账号 |
 | Docker image 构建及 Compose `config` 解析 | NOT_RUN | 当前开发环境无 Docker CLI |
 | Vercel Preview/Production 部署与冷启动 | NOT_RUN | 没有目标 Vercel 项目或域名 |
 | 托管 PostgreSQL TLS、pooler 与 direct URL 实际连通 | NOT_RUN | 没有远程数据库项目凭据 |
