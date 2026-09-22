@@ -247,4 +247,4 @@ volumes:
 
 `docs/acceptance.md` 每条记录 PASS/FAIL/NOT_RUN、版本、时间和不含敏感信息的证据。三家真实账号、两台真实设备、Vercel 项目、Provider Runtime 主机缺任何一个，都单独列 NOT_RUN，不能以合成 fixtures 代替真实验收。
 
-- [ ] **Step 7：提交** `feat: deploy dashboard to Vercel with provider runtime`；全量审查最终 diff 与设计约束。没有用户提供的 Vercel 项目和 Runtime 主机时只交付可部署产物，不声称已发布。
+- [x] **Step 7：提交** `feat: deploy dashboard to Vercel with provider runtime`；全量审查最终 diff 与设计约束。没有用户提供的 Vercel 项目和 Runtime 主机时只交付可部署产物，不声称已发布。
