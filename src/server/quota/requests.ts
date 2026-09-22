@@ -32,7 +32,6 @@ export async function requestRefresh(accountId: string, now: Date, pool: Pool): 
         auth_blocked = false, next_attempt_at = LEAST(next_attempt_at, $2)
       WHERE account_id = $1
     `, [accountId, now]);
-    await client.query("SELECT pg_notify('dashboard_changed', 'quota')");
     await client.query('COMMIT');
     return 'queued';
   } catch (error) {

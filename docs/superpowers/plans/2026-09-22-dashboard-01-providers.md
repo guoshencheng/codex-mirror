@@ -260,7 +260,7 @@ CREATE TABLE quota_snapshots (
 CREATE INDEX quota_history_age ON quota_snapshots(observed_at);
 ```
 
-每次刷新独占 PoolClient；`pg_try_advisory_lock(hashtextextended(account_id, 0))` 串行化同账号，持有该连接直到 finally 解锁（连接断开自动释放）；网络请求不持有数据库事务。获取锁后再次判断 enabled、auth_blocked、due/manual，避免已完成的并发请求重复查询。开始时记录 lastAttempt；成功时单事务写 latest/history/status 并 `pg_notify('dashboard_changed','quota')`；失败只写状态不覆盖快照。连接损坏时销毁 client 不放回池。
+每次刷新独占 PoolClient；`pg_try_advisory_lock(hashtextextended(account_id, 0))` 串行化同账号，持有该连接直到 finally 解锁（连接断开自动释放）；网络请求不持有数据库事务。获取锁后再次判断 enabled、auth_blocked、due/manual，避免已完成的并发请求重复查询。开始时记录 lastAttempt；成功时单事务写 latest/history/status；失败只写状态不覆盖快照。连接损坏时销毁 client 不放回池。浏览器轮询直接读取最新快照，不需要 PostgreSQL 通知。
 
 成功间隔 300 秒加 0..30 秒抖动；失败从 30 秒指数退避至 1800 秒，Retry-After 可延后但不提前。AUTH_REQUIRED/AUTH_EXPIRED/FORBIDDEN 阻止自动刷新；管理员修复授权后通过手动刷新清除阻止并重试。手动请求按账号行锁检查 30 秒冷却，仅设置 manual_requested_at；worker 成功或失败后仅清除此轮领取前的请求，保留运行中产生的新请求。
 

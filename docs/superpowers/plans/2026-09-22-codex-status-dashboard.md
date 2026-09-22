@@ -4,7 +4,9 @@
 
 **Goal:** 用远程 Next.js 服务汇总各设备事件与三家 Provider 额度。
 
-**Architecture:** Next.js App Router 部署到 Vercel，提供 Web、事件/API 与 SSE；PostgreSQL 使用托管服务。独立 Provider worker 部署在有持久存储的远程运行时，共享领域模块并获取 Codex、DeepSeek、Kimi Code 额度；设备采集器仅持久化并上报 Codex 生命周期事件。
+**Architecture:** Next.js App Router 部署到 Vercel，提供 Web、事件 API 和管理员 API；浏览器页面可见时每 10 秒读取 dashboard 快照。PostgreSQL 使用托管服务。独立 Provider worker 部署在有持久存储的远程运行时，共享领域模块并获取 Codex、DeepSeek、Kimi Code 额度；设备采集器仅持久化并上报 Codex 生命周期事件。
+
+> 2026-09-22 实现调整：原计划的 SSE 页面推送已由受保护的 10 秒轮询替代；远端设备仍由 Hook/采集器主动上报事件。
 
 **Tech Stack:** Next.js 16.3.5、React、TypeScript strict、Node.js 24 LTS、Vercel、托管 PostgreSQL 17、pg、Zod、Vitest、Playwright、Docker Compose（仅 Provider Runtime）。Node/Next 安装时核验安全补丁；全部依赖使用精确版本和 lockfile。不引入独立 API 框架、Redis 或 Codex 执行状态轮询。
 
@@ -26,7 +28,7 @@
 
 1. 多进程同时刷新或 worker 崩溃：锁释放、请求重试，不覆盖新快照。P1-T4。
 2. 补报、重复、乱序、epoch 切换：状态不回退，缺失不伪装确定。P2-T1/T3。
-3. 管理员退出但 SSE 仍连接：停止推送，设备 token 无法访问读接口。P3-T1/T2。
+3. 管理员退出或会话过期：清空面板数据，设备 token 无法访问读接口。P3-T1/T2。
 4. 同账号多设备及不同货币：不重复统计、不做隐式换算。P1-T3/T4、P3-T3。
 5. Next 构建/重载与进程重启：无重复调度、无缓存泄漏、状态与授权持久化。P3-T4。
 
@@ -47,8 +49,8 @@
 
 ```text
 codex-status-dashboard/
-  src/app/                     Next.js 页面、API、SSE
-  src/components/              纯展示和客户端订阅
+  src/app/                     Next.js 页面和 API
+  src/components/              纯展示和客户端轮询
   src/contracts/               可共享 DTO、Provider 指标、事件 schema
   src/server/providers/        Registry、策略、传输与凭据读取
   src/server/quota/            刷新请求、账号锁、快照持久化
@@ -102,9 +104,9 @@ Worker/collector 入口在各自任务创建；此前用 `next build` 检查 Nex
 
 ## 技术依据与实现边界
 
-Next.js Route Handlers 使用 Node runtime 和标准 Request/Response，SSE 可使用流式响应。出处：[Route Handlers](https://nextjs.org/docs/app/api-reference/file-conventions/route)、[Vercel streaming](https://vercel.com/docs/functions/streaming-functions)。文档与 npm registry 在 2026-09-22 核对到 Next.js 16.3.5。
+Next.js Route Handlers 使用 Node runtime 和标准 Request/Response。面板在页面可见时通过短时 `GET /api/dashboard` 请求每 10 秒更新，不使用 SSE 或长连接。出处：[Route Handlers](https://nextjs.org/docs/app/api-reference/file-conventions/route)。文档与 npm registry 在 2026-09-22 核对到 Next.js 16.3.5。
 
-Web、登录会话与设备事件接收运行在 Vercel Functions。额度 worker 不运行在 Vercel：Codex App Server 与 Kimi Code Server API 依赖持久授权目录/本地运行时，需要在远程 Provider Runtime 中运行；它与 Vercel Web 共用托管 PostgreSQL，并通过账号 advisory lock 协调。部署文档必须把 Vercel 项目与 Runtime 分开说明。不要把后台任务挂在 Vercel 请求生命周期、`after()`、`instrumentation` 或客户端页面上。SSE Route Handler 设置有限 maxDuration 并允许浏览器自动重连。
+Web、登录会话与设备事件接收运行在 Vercel Functions。额度 worker 不运行在 Vercel：Codex App Server 与 Kimi Code Server API 依赖持久授权目录/本地运行时，需要在远程 Provider Runtime 中运行；它与 Vercel Web 共用托管 PostgreSQL，并通过账号 advisory lock 协调。部署文档必须把 Vercel 项目与 Runtime 分开说明。不要把后台任务挂在 Vercel 请求生命周期、`after()`、`instrumentation` 或客户端页面上。页面隐藏时暂停 dashboard 轮询；设备事件仍由采集器主动上报。
 
 Vercel 当前 Cron 限制：Hobby 最多每天一次，Pro/Enterprise 可每分钟调度；本项目五分钟额度刷新不依赖 Cron，使用独立 Provider worker。参考：[Vercel Cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing)、[Function duration](https://vercel.com/docs/functions/configuring-functions/duration)、[Streaming](https://vercel.com/docs/functions/streaming-functions)。
 
@@ -123,7 +125,7 @@ Vercel 当前 Cron 限制：Hobby 最多每天一次，Pro/Enterprise 可每分�
 | 乱序/重复/旧 turn/epoch | P2-T1/T3 纯归约及 PostgreSQL 事务测试 |
 | 离线重连积压不伪装实时执行 | P2-T2/T3 恢复水位与 unconfirmed 测试 |
 | 多账号、多设备与项目归并 | P1-T4、P2-T2/T3、P3-T2/T3 |
-| 登录、CSRF、设备隔离、SSE 撤权 | P3-T1/T2 集成测试 |
+| 登录、CSRF、设备隔离、dashboard 读取授权 | P3-T1/T2 集成测试 |
 | 远程 HTTPS、容器、备份恢复 | P3-T4 |
 | 数据未知/过期/零值区别、手机查看 | P3-T3 组件及 Playwright 测试 |
 

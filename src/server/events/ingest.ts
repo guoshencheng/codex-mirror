@@ -179,7 +179,6 @@ export async function ingestBatch(deviceId: string, raw: unknown, options: Inges
     }
     const generation = Number((streamInfo.rows[0] as { generation: number }).generation);
     const acknowledgedThrough = await applyContiguous(client, deviceId, batch.epoch, generation, receivedAt);
-    await client.query("SELECT pg_notify('dashboard_changed', 'events')");
     await client.query('COMMIT');
     return { epoch: batch.epoch, acknowledgedThrough: Math.min(acknowledgedThrough, maxSent) };
   } catch (error) {
@@ -220,7 +219,6 @@ export async function recordHeartbeat(deviceId: string, raw: unknown, receivedAt
     await client.query(`UPDATE devices SET last_heartbeat_at = $2, last_boot_id = $3,
       last_queue_depth = $4, event_loss = event_loss OR $5 WHERE id = $1`,
     [deviceId, receivedAt, heartbeat.bootId, heartbeat.queueDepth, heartbeat.eventLoss]);
-    await client.query("SELECT pg_notify('dashboard_changed', 'heartbeat')");
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);

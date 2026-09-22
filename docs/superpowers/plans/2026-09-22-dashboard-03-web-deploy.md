@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 交付登录保护、实时更新的远程 Web 面板及可恢复部署。
+**Goal:** 交付登录保护、定时同步的远程 Web 面板及可恢复部署。
 
-**Architecture:** Next.js App Router 部署到 Vercel，提供 Web、事件接收、管理员 API 与 SSE。托管 PostgreSQL 保存业务数据。额度 worker 与 Codex/Kimi 持久授权运行在独立远程 Provider Runtime；它共享 PostgreSQL，Vercel Functions 不运行常驻进程。
+**Architecture:** Next.js App Router 部署到 Vercel，提供 Web、事件接收和管理员 API。浏览器页面可见时每 10 秒拉取 dashboard 快照；各设备通过事件 API 主动上报。托管 PostgreSQL 保存业务数据。额度 worker 与 Codex/Kimi 持久授权运行在独立远程 Provider Runtime；它共享 PostgreSQL，Vercel Functions 不运行常驻进程。
+
+> 2026-09-22 实现调整：原计划中的 SSE 方案已按产品决定替换为上述轮询；下文 SSE 设计细节仅记录最初实施过程，当前运行手册与验收记录以轮询方案为准。
 
 **Tech Stack:** Next.js 16.3.5、React、TypeScript、pg、Playwright、Vitest、Vercel、托管 PostgreSQL、Docker Compose（Provider Runtime only）。
 

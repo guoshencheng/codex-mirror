@@ -196,7 +196,7 @@ SELECT id FROM devices WHERE id = $1 AND revoked_at IS NULL FOR UPDATE;
 -- sequence 大于水位时存事件，payload hash 冲突则整个批次 409
 -- 从水位 + 1 开始，连续消费已存记录；中间缺口不越过
 -- 在同一事务更新 sessions / contiguous_sequence
-SELECT pg_notify('dashboard_changed', 'events');
+-- 浏览器在页面可见时轮询 dashboard 快照，不需要 PostgreSQL NOTIFY
 ```
 
 epoch 切换：已知 retired epoch 只允许返回旧水位，不重激活；未知新 epoch 由首次心跳或上报注册并增加设备 generation，旧会话标 unconfirmed。旧 generation 永远不能覆盖新 generation 状态。保留每个 stream 的水位和 retired 标记，即使 30 天事件已清理，也不重放 sequence<=水位的记录；相同 eventId 不同 payload 在保留期内 409。queueLost 通过心跳显式标 incomplete，不能自动填补缺失。设备重装需新注册 token/deviceId，避免克隆 queue 引起流混乱。

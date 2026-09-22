@@ -50,7 +50,6 @@ async function main(): Promise<void> {
       env: {
         ...process.env,
         DATABASE_URL: scopedUrl.toString(),
-        DATABASE_SESSION_URL: scopedUrl.toString(),
         DATABASE_DIRECT_URL: scopedUrl.toString(),
         APP_ORIGIN: origin,
         NODE_ENV: 'development',

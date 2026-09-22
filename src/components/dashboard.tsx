@@ -5,7 +5,7 @@ import type { DashboardDto, DashboardSession } from '../contracts/dashboard';
 import DeviceList from './device-list';
 import QuotaCard from './quota-card';
 import SessionList from './session-list';
-import { useDashboardStream } from './use-dashboard-stream';
+import { useDashboardPolling } from './use-dashboard-polling';
 
 function elapsed(start: string | null, now: Date): string | null {
   if (!start) return null;
@@ -27,7 +27,7 @@ export interface DashboardProps {
 }
 
 export default function Dashboard({ initial }: DashboardProps) {
-  const { data, connected, now, refresh, refreshQuota, logout } = useDashboardStream(initial);
+  const { data, syncHealthy, now, refresh, refreshQuota, logout } = useDashboardPolling(initial);
 
   return <main className="ds-app">
     <header className="ds-topbar">
@@ -41,13 +41,13 @@ export default function Dashboard({ initial }: DashboardProps) {
 
     <header className="ds-page-header">
       <div>
-        <span className="ds-page-header__context">实时状态</span>
+        <span className="ds-page-header__context">状态同步</span>
         <h1 className="ds-page-header__title">任务与额度</h1>
-        <p className="ds-page-header__description">设备上报事件驱动更新；离线时保留最近一次已知状态。</p>
+        <p className="ds-page-header__description">设备变化通过事件上报；页面可见时每 10 秒同步状态。</p>
       </div>
       <div className="ds-actions">
-        <span className={`ds-status ${connected ? 'ds-status--active' : 'ds-status--waiting'}`} aria-label="实时流状态" aria-live="polite">
-          {connected ? '实时流已连接' : '实时流已断开'}
+        <span className={`ds-status ${syncHealthy ? 'ds-status--active' : 'ds-status--waiting'}`} aria-label="面板同步状态" aria-live="polite">
+          {syncHealthy ? '同步正常' : '同步中断'}
         </span>
         <button className="ds-btn" type="button" onClick={() => void refresh()}>刷新全部</button>
       </div>
@@ -91,7 +91,7 @@ export default function Dashboard({ initial }: DashboardProps) {
     </div>
 
     <footer className="ds-statusbar">
-      <span>{connected ? '接收实时变更' : '连接中断，显示最近快照'}</span>
+      <span>{syncHealthy ? '自动同步：页面可见时每 10 秒' : '同步中断，显示最近快照'}</span>
       <span>快照时间：<time dateTime={data.generatedAt}>{data.generatedAt.replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace(/Z$/, ' UTC')}</time></span>
       <span>当前时间：<time dateTime={now.toISOString()}>{now.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace(/Z$/, ' UTC')}</time></span>
     </footer>

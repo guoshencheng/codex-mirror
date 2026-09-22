@@ -9,14 +9,16 @@ const EMPTY_DASHBOARD: DashboardDto = {
   sessions: [],
   accounts: [],
 };
+const DASHBOARD_POLL_INTERVAL_MS = 10_000;
+const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
 
-export interface DashboardStreamOptions {
+export interface DashboardPollingOptions {
   navigate?(path: string): void;
 }
 
-export interface DashboardStreamValue {
+export interface DashboardPollingValue {
   data: DashboardDto;
-  connected: boolean;
+  syncHealthy: boolean;
   now: Date;
   refresh(): Promise<void>;
   refreshQuota(accountId: string): Promise<void>;
@@ -34,17 +36,17 @@ function deviceConnection(heartbeatAt: string | null, nowMilliseconds: number): 
   return age >= 60 ? 'stale' : 'online';
 }
 
-export function useDashboardStream(initial: DashboardDto, options: DashboardStreamOptions = {}): DashboardStreamValue {
+export function useDashboardPolling(initial: DashboardDto, options: DashboardPollingOptions = {}): DashboardPollingValue {
   const navigate = options.navigate ?? defaultNavigate;
   const [data, setData] = useState(initial);
-  const [connected, setConnected] = useState(false);
+  const [syncHealthy, setSyncHealthy] = useState(false);
   const [now, setNow] = useState(() => new Date(initial.generatedAt));
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const alive = useRef(false);
   const redirected = useRef(false);
   const csrfRef = useRef<string | null>(null);
-  const dirty = useRef(false);
   const activeLoad = useRef<Promise<void> | null>(null);
+  const refreshPending = useRef(false);
 
   const redirectToLogin = useCallback(() => {
     if (redirected.current) return;
@@ -52,7 +54,7 @@ export function useDashboardStream(initial: DashboardDto, options: DashboardStre
     csrfRef.current = null;
     setCsrfToken(null);
     setData(EMPTY_DASHBOARD);
-    setConnected(false);
+    setSyncHealthy(false);
     navigate('/login');
   }, [navigate]);
 
@@ -81,33 +83,42 @@ export function useDashboardStream(initial: DashboardDto, options: DashboardStre
   const refresh = useCallback(async (): Promise<void> => {
     if (!alive.current || redirected.current) return;
     if (activeLoad.current) {
-      dirty.current = true;
+      refreshPending.current = true;
       await activeLoad.current;
       return;
     }
 
     const task = (async () => {
       do {
-        dirty.current = false;
+        refreshPending.current = false;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), DASHBOARD_REQUEST_TIMEOUT_MS);
         try {
           const response = await fetch('/api/dashboard', {
             method: 'GET',
             credentials: 'same-origin',
             cache: 'no-store',
+            signal: controller.signal,
           });
           if (response.status === 401) {
             redirectToLogin();
             return;
           }
-          if (!response.ok) return;
+          if (!response.ok) {
+            if (alive.current && !redirected.current) setSyncHealthy(false);
+            continue;
+          }
           const snapshot = await response.json() as DashboardDto;
           if (!alive.current || redirected.current) return;
           setData(snapshot);
+          setSyncHealthy(true);
         } catch {
           // Keep the last known snapshot while the server or network is unavailable.
-          if (!dirty.current) return;
+          if (alive.current && !redirected.current) setSyncHealthy(false);
+        } finally {
+          clearTimeout(timeout);
         }
-      } while (dirty.current && alive.current && !redirected.current);
+      } while (refreshPending.current && alive.current && !redirected.current && document.visibilityState !== 'hidden');
     })();
     activeLoad.current = task;
     try { await task; }
@@ -185,23 +196,15 @@ export function useDashboardStream(initial: DashboardDto, options: DashboardStre
   useEffect(() => {
     alive.current = true;
     redirected.current = false;
-    let source: EventSource | undefined;
-    try {
-      source = new EventSource('/api/stream');
-      source.addEventListener('sync', () => { void refresh(); });
-      source.addEventListener('invalidate', () => { void refresh(); });
-      source.onopen = () => {
-        setConnected(true);
-      };
-      source.onerror = () => {
-        setConnected(false);
-        void renewCsrf();
-      };
-    } catch {
-      setConnected(false);
-    }
-
     void renewCsrf();
+    if (document.visibilityState !== 'hidden') void refresh();
+    const dashboardTimer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') void refresh();
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') void refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
     const clockTimer = setInterval(() => setNow(new Date()), 1_000);
     const freshnessTimer = setInterval(() => {
       const at = Date.now();
@@ -213,10 +216,8 @@ export function useDashboardStream(initial: DashboardDto, options: DashboardStre
 
     return () => {
       alive.current = false;
-      if (source) {
-        source.close();
-        source = undefined;
-      }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      clearInterval(dashboardTimer);
       clearInterval(clockTimer);
       clearInterval(freshnessTimer);
     };
@@ -225,5 +226,5 @@ export function useDashboardStream(initial: DashboardDto, options: DashboardStre
   // Keep the ref in sync for callbacks that may run before React commits state.
   useEffect(() => { csrfRef.current = csrfToken; }, [csrfToken]);
 
-  return { data, connected, now, refresh, refreshQuota, logout };
+  return { data, syncHealthy, now, refresh, refreshQuota, logout };
 }

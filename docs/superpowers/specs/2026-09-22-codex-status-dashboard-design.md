@@ -28,14 +28,14 @@
                               ↓
                          额度快照/历史
                               ↓
-                       登录保护的 API + SSE
+                 登录保护的 API + 可见页 10 秒轮询
                               ↓
                        响应式 Web 面板
 ```
 
 技术栈：TypeScript、Next.js App Router（页面与 Route Handlers）、Node.js LTS、Vercel、托管 PostgreSQL。Vercel 部署 Web/API；额度 worker 与 Provider CLI 的持久授权运行在独立远程 Provider Runtime。计划基线为 Next.js 16.3.5、Node.js 24 LTS、PostgreSQL 17；安装时核验安全补丁并锁定依赖。
 
-所有 Web 和设备业务 HTTP 接口由 Next.js 提供，不额外引入 Fastify。额度调度作为独立 Node.js Provider worker 运行，共用领域模块；不在 Vercel Route Handler、instrumentation 或 after 回调里启动周期任务。手动刷新只入持久请求队列，由 worker 消费。SSE 使用 PostgreSQL LISTEN/NOTIFY 通知失效，全量查询为真值；通知不承载敏感数据。Vercel Functions 负责请求生命周期，不能假设其文件系统可持久保存 Codex/Kimi 登录态。
+所有 Web 和设备业务 HTTP 接口由 Next.js 提供，不额外引入 Fastify。额度调度作为独立 Node.js Provider worker 运行，共用领域模块；不在 Vercel Route Handler、instrumentation 或 after 回调里启动周期任务。手动刷新只入持久请求队列，由 worker 消费。采集器在各端通过事件 API 主动上报；浏览器仅在页面可见时每 10 秒读取受保护的 dashboard 快照，避免常驻 Vercel Function 和 PostgreSQL LISTEN 连接。Vercel Functions 负责请求生命周期，不能假设其文件系统可持久保存 Codex/Kimi 登录态。
 
 Web 与服务端同源。首期一个服务实例即可，数据库管理事件和额度刷新锁，无需 Redis。设备端先覆盖 macOS、Linux，Windows 作为后续适配；这是当前平台假设，不影响上报协议。
 
@@ -132,7 +132,7 @@ interface QuotaProviderStrategy {
 }
 ```
 
-策略只负责一次查询，不自行启动轮询、写库或推送 SSE；传输细节由各实现封装。调度器兜底捕获非预期异常，禁止把上游错误正文返回前端。
+策略只负责一次查询，不自行启动调度、写库或驱动页面同步；传输细节由各实现封装。调度器兜底捕获非预期异常，禁止把上游错误正文返回前端。
 
 余额和额度不合并成一个“总额度百分比”。不同币种分别展示，不自动汇率换算。不根据模型名称猜测额度桶映射；只展示来源明确提供的关联。
 
@@ -204,7 +204,7 @@ Hook 写入器将最小事件原子写入本地持久队列，上传器收到服
 - `GET /api/devices`、`GET /api/sessions`：登录用户读取状态。
 - `GET /api/provider-accounts`：返回不含凭据的配置概要与额度。
 - `POST /api/provider-accounts/:id/refresh`：请求刷新，返回执行中或冷却状态。
-- `GET /api/stream`：带版本标识的变更通知；断线重连重新拉取全量快照，避免错过更新。
+- `GET /api/dashboard`：返回管理员可见的单一快照；页面可见时每 10 秒重新请求，失败时保留最近一次已知状态。
 
 首期以部署配置管理账号与 secret 文件引用，Web 不提供任意上游 URL 输入和凭据编辑器。
 
@@ -220,14 +220,14 @@ Vercel 提供 Web/API；托管 PostgreSQL 保存状态、快照与手动刷新�
 
 ## 7. 验证与验收
 
-1. 在两台真实设备上分别提交、停止和触发审批；面板在联网正常时 5 秒内反映事件，确认没有任务轮询。
+1. 在两台真实设备上分别提交、停止和触发审批；设备通过事件上报而非进程轮询，面板在页面可见时的下一次 10 秒轮询中反映事件。
 2. 断网后产生事件，恢复连接可补报；重复上传不重复应用，乱序和旧 turn 不导致状态回退。
 3. 采集器在线但 Codex 无终止事件退出时，不谎报已完成，展示最后事件及未确认状态。
 4. 单独从远程服务器获取三家真实账号数据，与官方显示核对；不依赖执行设备在线。
 5. 用脱敏样本测试策略：多 bucket、缺失窗口、零余额、多币种、非整数百分比、失效授权、429、超时和响应结构变化。
 6. 用假 Provider 策略接入 Registry，验证无需修改调度器和通用 UI 即能展示其标准指标。
 7. 同一账号关联两台设备只产生一份额度；并发手动/定时刷新只查询一次。
-8. 验证设备凭证不能读面板、未登录不能读 SSE，响应与日志不含凭据。
+8. 验证设备凭证不能读取面板快照、未登录不能读取 dashboard API，响应与日志不含凭据。
 9. 新服务器按部署文档启动、重启及恢复备份后，账号配置与快照仍可用。
 
 ## 8. 实施阶段与可行性门槛
@@ -238,7 +238,7 @@ Vercel 提供 Web/API；托管 PostgreSQL 保存状态、快照与手动刷新�
 
 1. Provider 契约、Registry、三种策略和服务器额度刷新闭环。
 2. 设备事件协议、本地持久队列、上传和服务端归约闭环。
-3. Web 汇总、登录、SSE、部署与完整验收。
+3. Web 汇总、登录、面板轮询、部署与完整验收。
 
 远程任务控制、审批操作、任务派发、通知、自动充值、额度重置操作、Windows 安装器和原生 Widget 不属于首期范围。
 

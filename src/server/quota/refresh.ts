@@ -53,7 +53,6 @@ async function persistSuccess(client: PoolClient, accountId: string, snapshot: P
         manual_requested_at = CASE WHEN $4::timestamptz IS NOT NULL AND manual_requested_at <= $4 THEN NULL ELSE manual_requested_at END
       WHERE account_id = $1
     `, [accountId, now, nextAt, manualAt]);
-    await client.query("SELECT pg_notify('dashboard_changed', 'quota')");
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
@@ -75,7 +74,6 @@ async function persistFailure(client: PoolClient, accountId: string, failure: Pr
         manual_requested_at = CASE WHEN $6::timestamptz IS NOT NULL AND manual_requested_at <= $6 THEN NULL ELSE manual_requested_at END
       WHERE account_id = $1
     `, [accountId, failure.code, count, blocked, nextAt, manualAt]);
-    await client.query("SELECT pg_notify('dashboard_changed', 'quota')");
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);

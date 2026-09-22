@@ -2,17 +2,15 @@ import type { Pool } from 'pg';
 import { requireAdmin, verifyCsrf } from '../auth/session';
 import { requestRefresh } from '../quota/requests';
 import { getAccounts, getDashboard, getDevices, getSessions } from './dashboard';
-import { createAdminStream, type AdminStreamOptions } from '../stream/sse';
 
 const PRIVATE_NO_STORE = { 'Cache-Control': 'private, no-store' };
 type RefreshContext = { params: Promise<{ id: string }> };
-type DashboardHandlerOptions = { stream?: Partial<AdminStreamOptions> };
 
 function jsonError(error: string, status: number, headers: HeadersInit = PRIVATE_NO_STORE): Response {
   return Response.json({ error }, { status, headers });
 }
 
-export function createDashboardHandlers(pool: Pool, options: DashboardHandlerOptions = {}) {
+export function createDashboardHandlers(pool: Pool) {
   async function authorize(request: Request) {
     try {
       const admin = await requireAdmin(request, pool);
@@ -66,20 +64,6 @@ export function createDashboardHandlers(pool: Pool, options: DashboardHandlerOpt
       } catch (error) {
         if (error instanceof Error && error.message === 'ACCOUNT_NOT_FOUND') return jsonError('NOT_FOUND', 404);
         return jsonError('REFRESH_UNAVAILABLE', 503);
-      }
-    },
-    async stream(request: Request): Promise<Response> {
-      const auth = await authorize(request);
-      if (auth.status === 'unauthorized') return jsonError('UNAUTHORIZED', 401);
-      if (auth.status === 'unavailable') return jsonError('AUTH_UNAVAILABLE', 503);
-      const admin = auth.admin;
-      try { return await createAdminStream(request, admin.sessionId, options.stream); }
-      catch (error) {
-        if (error instanceof Error && error.message === 'STREAM_AUTH_EXPIRED') return jsonError('UNAUTHORIZED', 401);
-        if (error instanceof Error && error.message === 'STREAM_LIMIT') {
-          return jsonError('STREAM_LIMIT', 429, { ...PRIVATE_NO_STORE, 'Retry-After': '5' });
-        }
-        return jsonError('STREAM_UNAVAILABLE', 503);
       }
     },
   };
