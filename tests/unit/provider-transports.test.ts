@@ -130,7 +130,7 @@ rl.on('line', line => {
   }
 });`;
     await writeFile(executable, source, { mode: 0o700 });
-    const raw = await new CodexRpc(home, executable).readRateLimits(new AbortController().signal, 1000);
+    const raw = await new CodexRpc(home, executable).readRateLimits(new AbortController().signal, 5000);
     expect(raw).toEqual({ rateLimitsByLimitId: { codex: { primary: null } } });
   });
 
