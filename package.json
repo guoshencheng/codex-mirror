@@ -21,13 +21,15 @@
     "admin:create": "tsx scripts/create-admin.ts",
     "device:create": "tsx scripts/create-device.ts",
     "device:revoke": "tsx scripts/revoke-device.ts",
-    "collector": "tsx collector/src/cli.ts"
+    "collector": "tsx collector/src/cli.ts",
+    "collector:build": "tsup --config tsup.collector.config.ts"
   },
   "keywords": [],
   "author": "",
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "better-sqlite3": "13.0.3",
     "next": "16.3.5",
     "pg": "8.23.0",
     "react": "19.3.0",
@@ -38,6 +40,7 @@
     "@playwright/test": "1.63.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
+    "@types/better-sqlite3": "9.6.0",
     "@types/node": "24.13.6",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
