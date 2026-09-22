@@ -28,7 +28,7 @@
 4. 时钟漂移、设备重装、30 天清理：序列不依赖时间，不因删除 dedup 记录重放。T3。
 5. 设备冒充、请求过大、原始工具数据泄露：认证绑定设备与字段白名单。T2/T3。
 
-### P2-T1：事件协议与纯状态机
+### Task 1: Event Protocol and Pure State Reducer
 
 **Files:** 新建 `src/contracts/events.ts`、`src/server/events/reducer.ts`、`src/server/events/freshness.ts`、`tests/unit/event-reducer.test.ts`、`tests/unit/event-schema.test.ts`。
 
@@ -103,7 +103,7 @@ sequence <= lastSequence 原样返回。不同 turnId 的工具/停止/中断事
 - [ ] **Step 4：扩展测试。** 遍历状态表；60/120/600 秒边界；Future occurredAt；null 心跳；重复序号；缺失 turnId；首次工具事件；session.started 迟到；审批后工具继续；工具失败仅 tool.finished。纯归约不用数据库/计时器。
 - [ ] **Step 5：通过 tests/typecheck 后提交** `feat: define event protocol and conservative session reducer`。
 
-### P2-T2：本地队列、Hook 桥接与上传
+### Task 2: Local Queue, Hook Adapter, and Uploader
 
 **Files:** 新建 `collector/src/cli.ts`、`queue.ts`、`hook.ts`、`uploader.ts`、`heartbeat.ts`、`project.ts`、`install.ts`、`tests/unit/collector-queue.test.ts`、`tests/unit/collector-hook.test.ts`、`tests/unit/collector-upload.test.ts`、`docs/collector-install.md`。
 
@@ -163,7 +163,7 @@ const hookTypes = {
 
 - [ ] **Step 6：补齐队列上限、并发写、ack 越界、假 server ack、安装幂等和脱敏测试；提交** `feat: add durable event-only device collector`。目标 macOS/Linux 各验证一轮 Hook，不修改用户工作会话来制造审批，使用临时测试项目。
 
-### P2-T3：Next.js 设备接口、流事务与设备注册
+### Task 3: Next.js Ingest Routes, Ordered Streams, and Device Registration
 
 **Files:** 新建 `migrations/002-events.sql`、`src/server/events/ingest.ts`、`device-auth.ts`、`heartbeat.ts`、`src/app/api/agent/events/route.ts`、`src/app/api/agent/heartbeat/route.ts`、`scripts/create-device.ts`、`scripts/revoke-device.ts`、`tests/integration/event-ingest.test.ts`、`tests/integration/device-auth.test.ts`。
 

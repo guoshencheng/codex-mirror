@@ -27,7 +27,7 @@
 4. 缺失额度与零额度、多币种、多设备同账号：T3。
 5. Docker 重启、迁移失败、恢复备份不丢数据或重复启动 worker：T4。
 
-### P3-T1：管理员登录与会话边界
+### Task 1: Administrator Authentication and Sessions
 
 **Files:** 新建 `migrations/003-admin.sql`、`src/server/auth/password.ts`、`session.ts`、`csrf.ts`、`rate-limit.ts`、`src/app/api/auth/login/route.ts`、`logout/route.ts`、`session/route.ts`、`src/app/login/page.tsx`、`scripts/create-admin.ts`、`tests/integration/admin-auth.test.ts`。
 
@@ -68,7 +68,7 @@ const cookieOptions = {
 
 - [ ] **Step 4：运行正确/错误密码、枚举防护、速率限制、过期、Origin、退出测试并提交** `feat: secure dashboard with administrator sessions`。响应和 HTML 设置 no-store，密码与 cookie 不记录日志。
 
-### P3-T2：读模型 API、手动刷新与 SSE
+### Task 2: Read APIs, Manual Refresh, and SSE
 
 **Files:** 新建 `src/contracts/dashboard.ts`、`src/server/read-model/dashboard.ts`、`src/server/db/notifications.ts`、`src/server/stream/sse.ts`、`src/app/api/devices/route.ts`、`sessions/route.ts`、`provider-accounts/route.ts`、`provider-accounts/[id]/refresh/route.ts`、`dashboard/route.ts`、`stream/route.ts`、`tests/integration/read-model.test.ts`、`tests/integration/sse.test.ts`。
 
@@ -156,7 +156,7 @@ ReadableStream cancel/request.signal abort 时移除 listener 和 timer。慢客
 
 - [ ] **Step 5：运行权限、读模型和 SSE 集成测试并提交** `feat: serve live dashboard data through Next.js`。覆盖跨请求缓存不复用、通知先于数据 fetch、logout、session 到期、DB 断连、浏览器取消后资源回收。
 
-### P3-T3：面板、额度卡片与设备接入页
+### Task 3: Dashboard, Quota Cards, and Device Onboarding
 
 **Files:** 修改 `src/app/page.tsx`；新建 `src/app/devices/page.tsx`、`src/components/dashboard.tsx`、`quota-card.tsx`、`metric-view.tsx`、`device-list.tsx`、`session-list.tsx`、`use-dashboard-stream.ts`、`src/app/globals.css`、`tests/unit/metric-view.test.tsx`、`tests/e2e/dashboard.spec.ts`、`playwright.config.ts`。
 
@@ -215,7 +215,7 @@ helpers 位于 `tests/e2e/helpers.ts`：loginAsTestAdmin 通过真实表单登�
 
 - [ ] **Step 5：通过组件测试与 Playwright，提交** `feat: build responsive status and quota dashboard`。
 
-### P3-T4：容器、自托管、迁移与最终验收
+### Task 4: Containers, Self-Hosting, and Acceptance
 
 **Files:** 新建 `deploy/Dockerfile`、`Dockerfile.worker`、`compose.yaml`、`nginx.conf`、`supervisord.conf`、`config.example.json`、`.env.example`、`.dockerignore`、`src/app/api/health/route.ts`、`scripts/backup.sh`、`scripts/restore.sh`、`docs/deployment.md`、`docs/acceptance.md`、`tests/integration/retention.test.ts`、`tests/e2e/deployment.spec.ts`。
 

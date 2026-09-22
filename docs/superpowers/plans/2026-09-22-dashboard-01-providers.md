@@ -29,7 +29,7 @@
 
 所有路径相对实现根目录。测试代码省略的只有重复 import；接口、样本输入及期望输出以下文为准。
 
-### P1-T1：工程基础、契约和 Registry
+### Task 1: Engineering Foundation, Contracts, and Registry
 
 **Files:** 新建 `package.json`、`tsconfig.json`、`next.config.ts`、`vitest.config.ts`、`vitest.integration.config.ts`、`.gitignore`、`src/app/layout.tsx`、`src/app/page.tsx`、`src/contracts/quota.ts`、`src/server/providers/registry.ts`、`tests/unit/provider-registry.test.ts`。
 
@@ -95,7 +95,7 @@ Next 初始页面只显示“尚未接入数据”，不填假数据；布局使
 
 - [ ] **Step 5：运行** 定向测试、`npm run typecheck`、`npx next build`；通过后精确暂存上述文件及 lockfile，提交 `feat: establish provider contracts and Next.js project`。
 
-### P1-T2：服务器授权可行性、传输与凭据边界
+### Task 2: Server Authorization, Transports, and Secret Boundaries
 
 **Files:** 新建 `src/server/providers/secret-store.ts`、`http.ts`、`codex/rpc.ts`、`kimi-code/client.ts`、`scripts/probe-providers.ts`、`docs/provider-verification.md`、`tests/unit/provider-transports.test.ts`、`tests/fixtures/providers/`。
 
@@ -148,7 +148,7 @@ probe 参数 provider 仅允许这三个固定值；内部使用相应传输，�
 
 - [ ] **Step 5：运行传输测试与 typecheck；提交** `feat: add server-side provider transports`。只有三家真实验证完成，才能将本阶段标记为 live-ready。
 
-### P1-T3：三个策略与指标标准化
+### Task 3: Provider Strategies and Metric Normalization
 
 **Files:** 新建 `src/server/providers/codex/strategy.ts`、`deepseek/strategy.ts`、`kimi-code/strategy.ts`、`src/server/providers/metric-schema.ts`、`tests/unit/provider-strategies.test.ts`。
 
@@ -199,7 +199,7 @@ Codex 多 bucket 字段存在时为权威，只有字段缺失时才回退单 bu
 - [ ] **Step 4：补充并运行异常样本。** NaN/Infinity（直接传对象）、越界 ratio、空数组、缺失窗口、旧单 bucket、Kimi `kind:error`、未知 schema、AUTH_EXPIRED、429 均需有断言。策略 capabilities 和 config.options 以 Zod 校验（未知 options 拒绝），返回配置问题而不是网络查询。
 - [ ] **Step 5：通过定向测试与 typecheck 后提交** `feat: implement Codex DeepSeek and Kimi quota strategies`。
 
-### P1-T4：持久刷新、账号锁与独立 worker
+### Task 4: Persistent Refresh, Account Locks, and Worker
 
 **Files:** 新建 `migrations/001-quota.sql`、`src/server/db/pool.ts`、`src/server/quota/repository.ts`、`refresh.ts`、`requests.ts`、`src/server/providers/bootstrap.ts`、`src/worker/main.ts`、`scripts/migrate.ts`、`tests/integration/quota-refresh.test.ts`。
 

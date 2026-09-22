@@ -1,0 +1,58 @@
+{
+  "name": "codex-status-dashboard",
+  "version": "0.1.0",
+  "description": "Remote Codex device and provider quota dashboard",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "worker": "tsx src/worker/main.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "providers:probe": "tsx scripts/probe-providers.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
+    "device:create": "tsx scripts/create-device.ts",
+    "device:revoke": "tsx scripts/revoke-device.ts",
+    "collector": "tsx collector/src/cli.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "next": "16.3.5",
+    "pg": "8.23.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "24.13.6",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "jsdom": "30.1.1",
+    "tsup": "8.5.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  },
+  "private": "true",
+  "allowScripts": {
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.2": true
+  },
+  "overrides": {
+    "esbuild": "0.28.2"
+  }
+}

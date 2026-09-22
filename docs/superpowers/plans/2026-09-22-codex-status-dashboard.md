@@ -32,8 +32,8 @@
 
 ## 项目位置与分阶段交付
 
-实现根目录：`/Users/guoshencheng/Documents/work/codex-mirror/codex-status-dashboard`。
-本次仅写文档，未创建项目、安装依赖或初始化 Git。当前父目录不是 Git 仓库；实现时在新项目中初始化独立仓库，将本设计和四份计划复制进其 `docs/superpowers/` 后提交。不要改动 `codex-quota/`。
+实现根目录：`/Users/guoshencheng/Documents/work/codex-mirror/codex-status-dashboard`；当前功能分支在 `.worktrees/native-implementation/`。
+项目已初始化独立 Git 仓库和隔离分支，设计文档与三个子计划已复制到该仓库并提交为基线。后续不改动 `codex-quota/`。
 
 | 顺序 | 子计划 | 独立可验收交付 |
 | --- | --- | --- |
@@ -108,7 +108,7 @@ Next.js Route Handlers 使用 Node runtime 和标准 Request/Response，SSE 可�
 
 ## 执行交接
 
-推荐 Native：三个阶段共享协议和数据库契约，在当前任务连续执行更容易保持一致；完成后进行独立全量复核。若选择 Subagent-driven，则按任务分别实现和审查。用户审阅本计划并选择方式后才开始代码实施。
+推荐 Native：三个阶段共享协议和数据库契约，在当前任务连续执行更容易保持一致；完成后进行独立全量复核。若选择 Subagent-driven，则按任务分别实现和审查。用户已选择当前任务直接实施，按 Native 执行顺序推进。
 
 ## 设计覆盖自检
 
