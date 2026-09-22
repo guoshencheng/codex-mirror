@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import MetricView from '../../src/components/metric-view';
 
@@ -55,5 +55,24 @@ describe('MetricView', () => {
     expect(progress).toHaveAttribute('aria-valuemax', '100');
     expect(progress).toHaveAttribute('aria-valuenow', '42.5');
     expect(progress).toHaveAttribute('aria-valuetext', '已使用 42.5%，剩余 57.5%');
+  });
+
+  it('renders reset times in the browser timezone and labels missing reset data', () => {
+    const resetAt = '2026-09-23T00:00:00.000Z';
+    const { container, rerender } = render(<MetricView metric={{
+      kind: 'quota-window', key: 'daily', label: '日额度', usedPercent: 12,
+      windowDurationSeconds: 86_400, resetsAt: resetAt,
+    }} />);
+
+    const reset = within(container).getByLabelText('重置时间');
+    expect(reset).toHaveAttribute('dateTime', resetAt);
+    expect(reset.textContent).not.toContain('Z');
+    expect(reset.textContent).not.toContain('UTC');
+
+    rerender(<MetricView metric={{
+      kind: 'quota-window', key: 'daily', label: '日额度', usedPercent: 12,
+      windowDurationSeconds: 86_400, resetsAt: null,
+    }} />);
+    expect(within(container).getByText('重置时间：未提供')).toBeInTheDocument();
   });
 });

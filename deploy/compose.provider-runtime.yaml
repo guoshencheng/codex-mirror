@@ -1,0 +1,55 @@
+name: codex-status-dashboard-provider-runtime
+
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.provider-runtime
+      args:
+        CODEX_CLI_VERSION: ${CODEX_CLI_VERSION:-0.146.0}
+        KIMI_CODE_VERSION: ${KIMI_CODE_VERSION:-2.0.2}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    environment:
+      NODE_ENV: production
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:?Set DATABASE_DIRECT_URL to the managed PostgreSQL direct connection URL}
+      KIMI_CLI_COMMAND: /usr/local/bin/kimi-runtime
+      CODEX_RUNTIME_ROOT: /var/lib/dashboard-auth/codex
+      KIMI_RUNTIME_HOME: /var/lib/dashboard-auth/kimi
+      PROVIDER_ACCOUNTS_FILE: /run/config/provider-accounts.json
+      PROVIDER_SECRETS_ROOT: /run/secrets
+      TMPDIR: /tmp
+    volumes:
+      - type: volume
+        source: runtime-auth
+        target: /var/lib/dashboard-auth
+      - type: bind
+        source: ./provider-accounts.json
+        target: /run/config/provider-accounts.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./secrets
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  runtime-auth:
+    name: codex-status-dashboard-provider-runtime-auth

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { BalanceMetric, QuotaMetric, QuotaWindowMetric } from '../contracts/quota';
 
 function formatPercent(value: number): string {
@@ -14,11 +15,37 @@ function BalanceView({ metric }: { metric: BalanceMetric }) {
   </section>;
 }
 
+function ResetTime({ value }: { value: string | null }) {
+  const [local, setLocal] = useState<{ value: string; formatted: string }>({ value: '', formatted: '' });
+
+  useEffect(() => {
+    if (!value) return;
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) {
+      setLocal({ value, formatted: '' });
+      return;
+    }
+    try {
+      const formatted = new Intl.DateTimeFormat(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      }).format(timestamp);
+      setLocal({ value, formatted });
+    } catch {
+      setLocal({ value, formatted: '' });
+    }
+  }, [value]);
+
+  if (!value) return <p>重置时间：未提供</p>;
+  const formatted = local.value === value ? local.formatted : '';
+  return <p>重置时间：<time aria-label="重置时间" dateTime={value}>{formatted || '正在载入本地时间…'}</time></p>;
+}
+
 function QuotaWindowView({ metric }: { metric: QuotaWindowMetric }) {
   if (metric.usedPercent === null) {
     return <section aria-label={metric.label} data-metric-kind="quota-window">
       <h3>{metric.label}</h3>
       <p>额度数据不可用</p>
+      <ResetTime value={metric.resetsAt} />
     </section>;
   }
 
@@ -30,6 +57,7 @@ function QuotaWindowView({ metric }: { metric: QuotaWindowMetric }) {
   return <section aria-label={metric.label} data-metric-kind="quota-window">
     <h3>{metric.label}</h3>
     <p>已使用 {usedText}%，剩余 {remainingText}%</p>
+    <ResetTime value={metric.resetsAt} />
     <div
       role="progressbar"
       aria-label={`${metric.label}已使用`}

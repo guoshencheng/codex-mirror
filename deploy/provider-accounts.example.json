@@ -1,0 +1,25 @@
+[
+  {
+    "id": "codex-personal",
+    "providerId": "codex",
+    "label": "Codex personal",
+    "credentialRef": "managed-codex-login",
+    "options": {}
+  },
+  {
+    "id": "deepseek-primary",
+    "providerId": "deepseek",
+    "label": "DeepSeek primary",
+    "credentialRef": "deepseek-primary-api-key",
+    "options": {}
+  },
+  {
+    "id": "kimi-code-personal",
+    "providerId": "kimi-code",
+    "label": "Kimi Code personal",
+    "credentialRef": "kimi-code-server-token",
+    "options": {
+      "baseUrl": "http://127.0.0.1:58627"
+    }
+  }
+]

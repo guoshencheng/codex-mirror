@@ -1,0 +1,45 @@
+FROM node:24-bookworm-slim AS dependencies
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev
+
+FROM node:24-bookworm-slim AS runtime
+
+ARG CODEX_CLI_VERSION=0.146.0
+ARG KIMI_CODE_VERSION=2.0.2
+ENV NODE_ENV=production \
+  HOME=/var/lib/dashboard-auth/kimi \
+  CODEX_RUNTIME_ROOT=/var/lib/dashboard-auth/codex \
+  KIMI_RUNTIME_HOME=/var/lib/dashboard-auth/kimi \
+  KIMI_CLI_COMMAND=/usr/local/bin/kimi-runtime \
+  PROVIDER_ACCOUNTS_FILE=/run/config/provider-accounts.json \
+  PROVIDER_SECRETS_ROOT=/run/secrets \
+  TMPDIR=/tmp
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /app /var/lib/dashboard-auth/codex /var/lib/dashboard-auth/kimi /run/config /run/secrets \
+  && chown -R node:node /app /var/lib/dashboard-auth
+
+WORKDIR /app
+RUN npm install --global --omit=dev \
+  "@openai/codex@${CODEX_CLI_VERSION}" \
+  "@moonshot-ai/kimi-code@${KIMI_CODE_VERSION}" \
+  && printf '#!/bin/sh\nexport KIMI_CODE_NO_AUTO_UPDATE=1\nexec /usr/local/bin/kimi "$@"\n' > /usr/local/bin/kimi-runtime \
+  && chmod 0755 /usr/local/bin/kimi-runtime \
+  && npm cache clean --force
+
+COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json package-lock.json tsconfig.json ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node migrations ./migrations
+
+USER node
+ENTRYPOINT ["node_modules/.bin/tsx", "src/worker/provider-runtime.ts"]

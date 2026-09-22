@@ -5,6 +5,7 @@ import { makeProviderRegistry, readProviderAccountsConfig, validateProviderAccou
 import { createDirectDatabasePool } from '../server/db/pool';
 import { QuotaRepository } from '../server/quota/repository';
 import { runAccountRefresh } from '../server/quota/refresh';
+import { cleanupAgentEvents } from '../server/events/retention';
 
 export async function runWorker(signal: AbortSignal): Promise<void> {
   const pool = createDirectDatabasePool();
@@ -42,6 +43,7 @@ export async function runWorker(signal: AbortSignal): Promise<void> {
           }));
         }
         if (Date.now() >= nextCleanupAt) {
+          await cleanupAgentEvents(pool, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
           await repository.cleanupHistory(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
           nextCleanupAt = Date.now() + 24 * 60 * 60 * 1000;
         }
