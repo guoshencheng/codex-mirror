@@ -8,9 +8,7 @@
   min-height: 0;
   place-items: center;
   overflow: hidden;
-  background-color: #eae9e3;
-  background-image: radial-gradient(#bfc5bb 1px, transparent 1px);
-  background-size: 16px 16px;
+  background: #151f23;
   color: #e1e9d3;
   font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Code', 'PingFang SC', monospace;
   container-type: size;
@@ -248,7 +246,7 @@
 .sessions > .sectionHead { min-height: 21px; flex-basis: 21px; }
 .sessions > .sectionHead > span { max-width: 130px; }
 .sessionList { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; overflow: hidden; }
-.sessionList li { min-height: 0; flex: 1 1 22px; border-bottom: 1px solid #263538; }
+.sessionList li { height: 22px; min-height: 22px; flex: 0 0 22px; border-bottom: 1px solid #263538; }
 .sessionList li:last-child { border-bottom: 0; }
 .sessionList h3 { height: 100%; margin: 0; font-size: inherit; font-weight: 400; }
 .sessionRow {
@@ -336,6 +334,15 @@
   text-decoration: none;
 }
 .action:hover { border-color: #66844e; }
+.manualForm { display: flex; flex-direction: column; gap: 9px; padding: 5px 2px 12px; }
+.manualForm h2 { margin: 0 0 4px; font-size: 15px; }
+.manualForm label { display: flex; flex-direction: column; gap: 4px; color: #b7c8b7; font-size: 10px; }
+.manualForm input, .manualForm select { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #40564c; background: #142126; color: #e2efdb; font: inherit; font-size: 12px; }
+.manualForm input:focus, .manualForm select:focus { outline: 1px solid #b7e784; }
+.manualForm p { margin: 0; color: #efc57d; font-size: 10px; }
+.accountEntry { display: flex; flex-direction: column; gap: 7px; padding: 8px; border: 1px solid #334840; }
+.accountEntryHead { display: flex; justify-content: space-between; align-items: center; font-size: 10px; }
+.accountEntryHead button { border: 0; background: transparent; color: #efc57d; cursor: pointer; font: inherit; }
 
 @keyframes bob { 50% { transform: translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .robot svg { animation: none; } }
