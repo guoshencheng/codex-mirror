@@ -1,6 +1,4 @@
 import type { Metadata } from 'next';
-import '@fontsource-variable/noto-sans-sc/wght.css';
-import '@fontsource-variable/jetbrains-mono/wght.css';
 import './globals.css';
 
 export const metadata: Metadata = {
