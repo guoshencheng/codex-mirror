@@ -1,29 +1,29 @@
-# Codex account login from the dashboard
+# 在看板中登录 Codex 账号
 
-## Goal
+## 目标
 
-An authenticated dashboard administrator can add a Codex account, complete the official ChatGPT device-code sign-in, and see that account's quota without editing provider configuration or copying credentials. Existing file-configured Codex accounts and API-key providers keep working.
+看板管理员无需修改 Provider 配置文件或复制凭据，即可添加 Codex 账号、通过 ChatGPT 设备码完成登录，并查看该账号的额度。已有的文件配置 Codex 账号和 API Key Provider 保持可用。
 
-## User flow
+## 用户流程
 
-The Add Account view offers Codex alongside the existing providers. Choosing Codex asks for a display name and starts a separate login flow. The page shows the verification URL and one-time code returned by Codex App Server, plus a waiting state. The administrator completes sign-in on the official site, and the page polls for completion. On success it refreshes the dashboard and shows the account's quota. On expiry, cancellation, or failure it shows a retry action. The page never accepts or displays an access token.
+“添加账号”页面提供 Codex 选项。管理员输入显示名称后开始登录；页面展示 Codex App Server 返回的官方验证网址、一次性代码和等待状态。管理员在官方页面完成登录后，看板轮询结果，成功时刷新额度；过期、取消或失败时提供重试。页面不接收或展示访问令牌。
 
-Device-code login must be enabled for the ChatGPT account or workspace. A disabled flow produces a clear error and points to the existing CLI login procedure as a fallback.
+ChatGPT 账号或工作区必须启用设备码登录。若该功能未启用，页面给出明确错误，并提示可使用现有 CLI 登录流程。
 
-## Architecture
+## 架构
 
-The `web` service owns admin authentication and CSRF checks. The `worker` service owns Codex CLI execution and the `runtime-auth` volume. A PostgreSQL login-request table bridges them. A POST endpoint creates one bounded pending request with a generated account ID; a GET endpoint returns only its public state. The worker claims requests, starts `codex app-server` with an isolated `CODEX_HOME`, calls `account/login/start` with `chatgptDeviceCode`, stores only the verification URL and user code in the request row, and holds the process until the `account/login/completed` notification. It then calls `account/read` and `account/rateLimits/read`, verifies ChatGPT mode, and persists the account and initial quota snapshot in one transaction.
+`web` 服务负责管理员认证和 CSRF 校验；`worker` 服务运行 Codex CLI，并持有 `runtime-auth` 卷。PostgreSQL 登录请求表在两者之间传递任务。POST 接口创建有数量与时限约束的请求及新账号 ID；GET 接口仅返回公开状态。worker 领取请求，在隔离的 `CODEX_HOME` 中启动 `codex app-server`，调用 `account/login/start`，参数为 `chatgptDeviceCode`；仅把验证网址和一次性代码写入请求记录。收到 `account/login/completed` 后，worker 调用 `account/read` 和 `account/rateLimits/read`，确认 ChatGPT 登录方式，并在同一事务中保存账号和首次额度快照。
 
-The worker creates the Codex runtime directory with owner-only permissions. Login credentials remain in that directory. The DB stores neither access nor refresh tokens. The browser receives only the URL, one-time code, status, and a safe error code. URLs are accepted only when HTTPS and on an OpenAI-owned host; the UI opens them with `noopener noreferrer`.
+worker 以仅所有者可访问的权限创建 Codex 运行目录。登录凭据只留在该目录；数据库不存访问或刷新令牌。浏览器仅收到网址、一次性代码、状态和安全的错误码。验证网址必须是 OpenAI 官方 HTTPS 域名；新窗口链接使用 `noopener noreferrer`。
 
-Successful web-created accounts use a distinct managed runtime reference, so the worker refreshes them through `CodexQuotaStrategy` while the existing API-key credential path remains unchanged. File-configured accounts retain their current IDs and behavior. Repository reconciliation must preserve web-created accounts rather than disabling them as absent from the JSON file.
+网页创建的账号使用独立的托管运行时标记，让 worker 通过 `CodexQuotaStrategy` 持续刷新额度；现有 API Key 凭据路径不变。文件配置账号维持原有 ID 和行为。配置文件同步不得将网页创建的账号禁用。
 
-## State and failure handling
+## 状态与失败处理
 
-Request states are queued, starting, awaiting authorization, succeeded, failed, cancelled, and expired. Only one active login is allowed per administrator session; the server bounds the active count globally. Requests expire after a short fixed window. The worker treats process exit, malformed protocol messages, timeout, disabled device auth, and quota-read failure as explicit failures. It terminates the child on completion or cancellation. On worker restart, unfinished claims are marked retryable or expired; a new attempt gets a new isolated account ID. Failed attempts remove their unused runtime directory after the child exits. Existing successful accounts are never removed by retry cleanup.
+请求状态为排队、启动中、等待授权、成功、失败、取消和过期。每个管理员会话最多有一个有效登录，全局有效登录数也受限。请求在固定短时限后过期。进程退出、协议消息无效、超时、设备码登录未启用或读取额度失败，均记录为明确的失败状态。完成或取消时终止子进程。worker 重启后恢复或结束未完成任务；重试使用新的隔离账号 ID。失败请求在子进程退出后清理未使用的运行目录，绝不删除已成功登录的账号。
 
-The API requires the existing admin session for reads and writes and the existing CSRF token for start and cancel. Responses use `private, no-store`. A request can be polled only by the administrator session that created it. Polling does not expose login codes through the public display API. Rate limits, TTL, and input length bounds prevent unbounded process and DB growth.
+所有 API 读写均要求现有管理员会话；开始和取消还要求现有 CSRF 令牌。响应使用 `private, no-store`。只有创建请求的管理员会话可以轮询它。公开展示 API 不提供登录代码。请求数量、存活时间和输入长度均有限制。
 
-## Verification
+## 验证
 
-Tests cover API authorization and CSRF, request ownership, state transitions, worker protocol success and failure, credential isolation, account persistence, file-config reconciliation, and dashboard UI states. The worker tests use a fake App Server process; no real ChatGPT account is needed in CI. Typecheck and relevant unit/integration tests run before completion. A manual deployment check is required to prove the actual device-code flow and quota read against an opted-in ChatGPT account.
+测试覆盖 API 认证与 CSRF、请求归属、状态流转、worker 协议成功与失败、凭据隔离、账号持久化、配置文件同步及页面状态。worker 测试使用模拟 App Server，不依赖真实 ChatGPT 账号。完成前运行类型检查及相关单元和集成测试。部署后仍需使用已开启设备码登录的真实 ChatGPT 账号，人工验收授权及额度读取。

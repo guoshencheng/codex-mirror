@@ -1,5 +1,7 @@
 # 部署手册：Vercel Web 与远程 Provider Runtime
 
+> 当前自托管部署请使用 [自托管部署说明](self-hosted-deployment.md)。本页保留原 Vercel 部署历史，以下关于用户 Token 入库及浏览器触发额度刷新等描述已不适用于当前自托管版本。
+
 Next.js Web/API 部署到 Vercel；托管 PostgreSQL 保存业务状态；独立 Docker Compose Provider Runtime 负责 Codex、DeepSeek、Kimi Code 额度查询。设备事件直接发送给 Vercel API，worker 不读取设备状态，也不依赖 Vercel Cron。Provider Runtime 每秒查询数据库中的到期额度任务，额度刷新成功后按约 5 分钟间隔调度；它不会轮询 Codex 进程或会话。
 
 ## 连接与配置边界
@@ -8,6 +10,7 @@ Next.js Web/API 部署到 Vercel；托管 PostgreSQL 保存业务状态；独立
 | --- | --- | --- |
 | Vercel | `APP_ORIGIN` | 面板公开 HTTPS 来源，登录和 CSRF 校验使用 |
 | Vercel | `DATABASE_URL` | 托管 PostgreSQL 的 serverless/pooler URL |
+| Vercel | `PROVIDER_CREDENTIAL_KEY` | 32 字节随机密钥的 base64url 编码，用于加密面板新增的 DeepSeek API Key；备份时须保留，不能轮换后丢弃旧值 |
 | 发布/运维 shell | `DATABASE_DIRECT_URL` | 直连数据库，用于 migration、初始化 CLI、worker、备份和恢复 |
 | Provider Runtime | `deploy/provider-accounts.json` | Provider 账号别名、策略 ID 和 secret 文件引用，不存放凭据 |
 | Provider Runtime | `deploy/secrets/*` | DeepSeek API Key、Kimi server bearer token；容器只读挂载 |
@@ -18,10 +21,12 @@ Next.js Web/API 部署到 Vercel；托管 PostgreSQL 保存业务状态；独立
 ## Vercel 部署
 
 1. 从 Git 导入仓库，Project Root Directory 保持仓库根目录，Framework 使用 Next.js 默认配置；仓库内的 `vercel.json` 已声明 `framework: nextjs`。不要设置 `output: standalone`，也不要把 Provider Runtime 当成 Vercel Function。
-2. 在 Vercel 项目环境变量中配置 `APP_ORIGIN` 和 pooled `DATABASE_URL`。登录/CSRF 校验严格匹配固定 `APP_ORIGIN`，不会动态信任请求的 `Host` 或 `VERCEL_URL`。Production 使用稳定的生产域名；Preview 需绑定稳定的 Preview/branch domain，并为 Preview 环境设置与其完全一致的 `APP_ORIGIN`。不要让每次部署变化的随机 URL 共用 Production origin，也不要设置 `NEXT_PUBLIC_*` 数据库或 Provider 凭据。
+2. 在 Vercel 项目环境变量中配置 `APP_ORIGIN` 和 pooled `DATABASE_URL`。登录/CSRF 校验严格匹配固定 `APP_ORIGIN`，不会动态信任请求的 `Host` 或 `VERCEL_URL`。若采集端需要使用不同的稳定域名，可设置 `COLLECTOR_PUBLIC_ORIGIN` 为该 HTTPS origin；安装链接和采集服务地址会使用它，登录仍使用 `APP_ORIGIN`。Production 使用稳定的生产域名；Preview 需绑定稳定的 Preview/branch domain，并为 Preview 环境设置与其完全一致的 `APP_ORIGIN`。不要让每次部署变化的随机 URL 共用 Production origin，也不要设置 `NEXT_PUBLIC_*` 数据库或 Provider 凭据。
 3. 将 Vercel Functions region 与托管数据库 region 对齐，减少数据库往返延迟。Region 需按实际数据库位置在 Vercel 项目设置中选择，本仓库不猜测具体区域。
-4. 每次需要新增 schema 时，从受限的发布环境显式运行 `npm run db:migrate`，该命令使用 `DATABASE_DIRECT_URL`。不要把 migration 隐式放进 Web Function 冷启动。
+4. 每次需要新增 schema 时，从受限的发布环境显式运行 `npm run db:migrate`，该命令使用 `DATABASE_DIRECT_URL`。设备一键注册需要 migration `004-device-registration.sql` 和 Vercel Production secret `DEVICE_REGISTRATION_SECRET`（至少 32 个随机字节）；不要把 migration 隐式放进 Web Function 冷启动。
 5. 首次发布后访问 `https://<面板域名>/api/health`。它只返回 `{ "ok": true }`，用于进程存活探测，不回显数据库错误或环境变量。完成管理员初始化后，测试登录、设备上报和面板读取。
+
+面板的“添加账号”入口可一次录入多个 DeepSeek 或 Kimi Code 中国站 API 账号；Web 服务分别调用 DeepSeek 余额接口或 Kimi Code 中国站用量接口，成功账号的 API Key 加密保存在 `provider_credentials` 表，失败账号会在表单中逐行显示原因。选择“登录 Codex”时，Provider Runtime 使用官方设备码流程生成验证网址和一次性代码，管理员在 ChatGPT 页面完成授权；该功能要求在个人安全设置或工作区权限中启用设备码登录。OAuth 凭据仅保留在 Provider Runtime 授权卷，Web 与数据库只接收登录状态和额度。设备码不可用时可按下文继续使用 CLI 登录。页面可见时每分钟检查一次 API 账号，距上次尝试超过 5 分钟便请求更新；手动刷新也会直接请求 API。Kimi Code 中国站使用 `https://api.kimi.com/coding/v1/usages`，按返回的窗口与套餐用量展示，不从重置时间猜测套餐周期。Provider Runtime 继续管理配置文件中的账号，不会停用面板新增的账号。
 
 面板 API 使用普通短请求，浏览器页面可见时每 10 秒读取一次最新快照，页面隐藏时暂停；这不创建常驻 Vercel Function，也不需要 PostgreSQL `LISTEN` 连接。设备 Hook 仍通过事件 API 主动上报，额度刷新每 5 分钟由远程 Provider Runtime 完成，不建立 5 分钟 Vercel Cron。Vercel Cron 的频率依计划类型受限，且无论如何不应承载需要持久 CLI 登录目录的工作进程。
 
@@ -122,11 +127,11 @@ set -a
 set +a
 npm ci
 npm run db:migrate
-npm run admin:create
+npm run admin:create -- --output=/private/path/dashboard-user-token.txt
 npm run device:create -- 'MacBook Pro'
 ```
 
-`admin:create` 密码使用隐藏终端输入；`device:create` 只显示一次设备 token。将 token 安全配置到每台采集端，不要粘贴到截图、聊天或日志。worker 日志不显示上游响应正文和凭据；Compose 也限制日志轮替。可用以下命令查看服务是否运行：
+`admin:create` 生成随机用户 Token 并保存到指定的 0600 文件；登录页仅输入此 Token。轮换使用同一命令加 `--rotate` 和新的输出路径，旧 Token 及已有会话立即失效。数据库沿用原凭据哈希字段保存 scrypt 哈希，不保存明文 Token；`device:create` 只显示一次设备 token。将 token 安全配置到每台采集端，不要粘贴到截图、聊天或日志。worker 日志不显示上游响应正文和凭据；Compose 也限制日志轮替。可用以下命令查看服务是否运行：
 
 ```sh
 docker compose --env-file .env -f deploy/compose.provider-runtime.yaml ps
