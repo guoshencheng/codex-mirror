@@ -16,7 +16,8 @@ function CompactMetric({ metric }: { metric: QuotaMetric }) {
   }
   const remaining = Math.round((100 - Math.max(0, Math.min(100, metric.usedPercent))) * 10) / 10;
   return <span className={styles.metric} title={`${metric.label}剩余 ${remaining}%`}>
-    <small>{label}</small><span className={styles.bar} aria-hidden="true"><i style={{ width: `${remaining}%` }} /></span>
+    <span className={styles.ring} role="img" aria-label={`${label}剩余 ${remaining}%`} style={{ background: `conic-gradient(var(--accent) ${remaining}%, #30403e 0)` }} />
+    <small>{label}</small>
     <strong>{remaining}%</strong>
   </span>;
 }
@@ -28,7 +29,7 @@ export default function PixelQuotaRow({ account, now, onOpen }: {
   const notice = quotaNotice(account, now);
   return <li className={styles.providerItem}>
     <button className={`${styles.providerRow} ${notice ? styles.quotaWarning : ''}`}
-      aria-label={`查看 ${account.label} 额度详情`} onClick={onOpen}
+      aria-label={`查看 ${account.label} 额度详情${notice ? `，${notice}` : ''}`} onClick={onOpen}
       title={`${account.providerId} · ${account.label}${notice ? ` · ${notice}` : ''}`}>
       <span className={styles.providerName}><i />
         <span>{account.providerId}<small>{notice ?? account.label}</small></span>

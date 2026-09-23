@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { DashboardDto } from '../contracts/dashboard';
 import DeviceList from './device-list';
 import QuotaCard from './quota-card';
+import ManagedAccountForm from './managed-account-form';
 import PixelQuotaRow from './pixel-quota-row';
+import PixelSessionIcon from './pixel-session-icon';
 import { ageText, durationText, isCurrentSession, sessionLabels } from './pixel-dashboard-model';
 import { useDashboardPolling } from './use-dashboard-polling';
 import styles from './pixel-dashboard.module.css';
 
-type Detail = { kind: 'account'; id: string } | { kind: 'session'; id: string; deviceId: string } | { kind: 'menu' | 'devices' };
+type Detail = { kind: 'account'; id: string } | { kind: 'session'; id: string; deviceId: string } | { kind: 'menu' | 'devices' | 'add-account' };
 
 function Pager({ page, pages, label, onChange }: { page: number; pages: number; label: string; onChange(page: number): void }) {
   if (pages <= 1) return null;
@@ -40,7 +42,6 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
   const opener = useRef<HTMLButtonElement | null>(null);
   const [scale, setScale] = useState<number | null>(null);
   const [accountPage, setAccountPage] = useState(0);
-  const [sessionPage, setSessionPage] = useState(0);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -74,10 +75,8 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
   const priority = (state: string) => state === 'WAITING_APPROVAL' ? 0 : state === 'WORKING' ? 1 : 2;
   const sessions = [...data.sessions].sort((a, b) => priority(a.state) - priority(b.state) || b.lastEventAt.localeCompare(a.lastEventAt));
   const listedSessions = sessions.slice(0, 12);
-  const accountPages = Math.max(1, Math.ceil(data.accounts.length / 3));
-  const sessionPages = Math.max(1, Math.ceil(listedSessions.length / 6));
+  const accountPages = Math.max(1, Math.ceil(data.accounts.length / 8));
   const visibleAccountPage = Math.min(accountPage, accountPages - 1);
-  const visibleSessionPage = Math.min(sessionPage, sessionPages - 1);
   const selectedAccount = detail?.kind === 'account' ? data.accounts.find(account => account.id === detail.id) : undefined;
   const selectedSession = detail?.kind === 'session' ? data.sessions.find(session => session.id === detail.id && session.deviceId === detail.deviceId) : undefined;
   const selectedDevice = selectedSession ? devicesById.get(selectedSession.deviceId) : undefined;
@@ -106,13 +105,13 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
           <div className={styles.detailScroll}>
             {detail.kind === 'account' ? selectedAccount
               ? <QuotaCard account={selectedAccount} now={now} onRefresh={refreshQuota} readOnly={readOnly} /> : <p>该账号已不在当前快照中</p> : null}
+            {detail.kind === 'add-account' && !readOnly ? <ManagedAccountForm onSaved={async done => { await refresh(); if (done) setDetail(null); }} /> : null}
             {detail.kind === 'session' ? selectedSession ? <article className={styles.sessionDetail}>
               <h2>{selectedSession.title}</h2>
               <p>{isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? '当前状态' : '最近状态'}：{sessionLabels[selectedSession.state]}</p>
               {!isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? <p className={styles.warning}>当前执行情况未知，请检查设备连接与状态同步。</p> : null}
               <dl><dt>项目</dt><dd>{selectedSession.projectName ?? '未归属项目'}</dd>
                 <dt>设备</dt><dd>{selectedDevice?.name ?? '未知设备'}</dd>
-                <dt>当前工具</dt><dd>{selectedSession.currentTool ?? '未上报'}</dd>
                 <dt>状态可信度</dt><dd>{selectedSession.confidence === 'confirmed' ? '已确认' : '未确认'}</dd>
                 <dt>最近事件</dt><dd><time dateTime={selectedSession.lastEventAt}>{selectedSession.lastEventAt}</time></dd>
                 <dt>本轮开始</dt><dd>{selectedSession.turnStartedAt ?? '未上报'}</dd>
@@ -125,6 +124,7 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
               <h2>面板操作</h2>
               {readOnly ? <p>只读演示数据，不连接账号或设备。点击额度行或会话行查看界面详情。</p> : <>
                 <Link className={styles.action} href="/devices">设备</Link>
+                <button className={styles.action} onClick={() => setDetail({ kind: 'add-account' })}>添加账号</button>
                 <button className={styles.action} onClick={() => setDetail({ kind: 'devices' })}>设备状态</button>
                 <button className={styles.action} disabled={refreshing} onClick={() => void refreshSnapshot()}>{refreshing ? '同步中…' : '刷新全部'}</button>
                 <button className={styles.action} onClick={() => void logout()}>退出登录</button>
@@ -144,7 +144,7 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
               {accountPages === 1 ? <span>额度窗口 · 或余额</span> : null}
             </div>
             <ul className={styles.providerList} aria-label="Provider 额度">
-              {data.accounts.slice(visibleAccountPage * 3, visibleAccountPage * 3 + 3).map(account => <PixelQuotaRow
+              {data.accounts.slice(visibleAccountPage * 8, visibleAccountPage * 8 + 8).map(account => <PixelQuotaRow
                 key={account.id} account={account} now={now} onOpen={() => {
                   opener.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
                   setDetail({ kind: 'account', id: account.id });
@@ -155,20 +155,20 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
           <section className={styles.sessions} aria-labelledby="sessions-heading">
             <div className={styles.sectionHead}><h2 id="sessions-heading">会话 <small>/ {listedSessions.length}</small></h2>
               <span>{waiting} 待审批 · {working.length} 执行中</span>
-              <Pager page={visibleSessionPage} pages={sessionPages} label="会话" onChange={setSessionPage} />
             </div>
             <ul className={styles.sessionList} aria-label="会话">
-              {listedSessions.slice(visibleSessionPage * 6, visibleSessionPage * 6 + 6).map(session => {
+              {listedSessions.map(session => {
                 const device = devicesById.get(session.deviceId);
                 const currentState = isCurrentSession(session, device, syncHealthy);
                 const label = `${currentState ? '' : '最近：'}${sessionLabels[session.state]}`;
-                return <li key={`${session.deviceId}:${session.id}`} className={currentState && session.state === 'WAITING_APPROVAL' ? styles.attention : ''}>
+                const tone = !currentState ? styles.uncertain : session.state === 'WAITING_APPROVAL' ? styles.attention : session.state === 'WORKING' ? styles.active : session.state === 'INTERRUPTED' ? styles.interrupted : '';
+                return <li key={`${session.deviceId}:${session.id}`} className={tone}>
                   <h3><button className={styles.sessionRow} onClick={event => open({ kind: 'session', id: session.id, deviceId: session.deviceId }, event.currentTarget)}
                     title={`${session.title} · ${session.projectName ?? '未归属项目'} · ${device?.name ?? '未知设备'} · ${label}`}>
-                    <span className={styles.symbol} aria-hidden="true">{!currentState ? '?' : session.state === 'WAITING_APPROVAL' ? '!' : session.state === 'WORKING' ? '›' : '·'}</span>
-                    <span className={styles.sessionName}>{session.title}</span>
-                    <span className={styles.project}>{session.projectName ?? device?.name ?? '未归属项目'}</span>
-                    <span className={styles.badge}>{label}</span>
+                    <PixelSessionIcon state={session.state} current={currentState} />
+                    <span className={styles.sessionCopy}><span className={styles.sessionName}>{session.title}</span>
+                      <span className={styles.sessionMeta}><span className={styles.project}>{device?.name ?? '未知设备'}</span><span className={styles.badge}>{label}</span></span>
+                    </span>
                   </button></h3>
                 </li>;
               })}
