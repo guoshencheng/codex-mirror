@@ -69,6 +69,20 @@ readline.createInterface({input:process.stdin}).on('line', line => {
       .rejects.toThrow('CODEX_AUTH_UNAVAILABLE');
   });
 
+  it('classifies an upstream 403 without exposing its message', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-login-test-'));
+    const executable = join(home, 'fake-codex');
+    await writeFile(executable, `#!/usr/bin/env node
+const readline = require('node:readline');
+readline.createInterface({input:process.stdin}).on('line', line => {
+  const req=JSON.parse(line);
+  if(req.method==='initialize') process.stdout.write(JSON.stringify({id:req.id,result:{}})+'\\n');
+  if(req.method==='account/login/start') process.stdout.write(JSON.stringify({id:req.id,error:{message:'device code request failed with status 403 Forbidden SECRET_CANARY'}})+'\\n');
+});`, { mode: 0o700 });
+    await expect(startCodexDeviceLogin(home, new AbortController().signal, () => {}, executable, 5000))
+      .rejects.toThrow('CODEX_AUTH_FORBIDDEN');
+  });
+
   it('times out a silent child and rejects an already aborted login', async () => {
     const home = await mkdtemp(join(tmpdir(), 'codex-login-test-'));
     const executable = join(home, 'silent-codex');

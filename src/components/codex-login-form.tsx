@@ -7,7 +7,8 @@ type LoginState = { id: string; status: string; verificationUrl: string | null; 
 const active = new Set(['queued', 'starting', 'awaiting']);
 
 function message(error: string | null): string {
-  if (error === 'CODEX_AUTH_UNAVAILABLE') return '无法启动设备码登录。请在 ChatGPT 设置中确认已启用设备码登录。';
+  if (error === 'CODEX_AUTH_FORBIDDEN') return 'OpenAI 拒绝了设备码请求（403）。服务器所在地区可能不受支持，请联系管理员检查部署地区。';
+  if (error === 'CODEX_AUTH_UNAVAILABLE') return '无法启动设备码登录。请检查 ChatGPT 设备码设置和服务器网络。';
   if (error === 'LOGIN_EXPIRED') return '登录已过期，请重新开始。';
   if (error === 'WORKER_RESTARTED') return '服务已重启，请重新开始登录。';
   if (error === 'LOGIN_IN_PROGRESS') return '当前会话已有登录进行中，请等待或取消后重试。';

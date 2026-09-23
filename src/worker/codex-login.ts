@@ -55,7 +55,7 @@ export async function processCodexLoginOnce(pool: Pool, signal: AbortSignal, dep
     saved = await repository.complete(request.id, snapshot);
     if (!saved) throw new Error('LOGIN_CANCELLED');
   } catch (error) {
-    const code = error instanceof Error && /^(LOGIN_EXPIRED|LOGIN_CANCELLED|CODEX_AUTH_UNAVAILABLE|CODEX_AUTH_FAILED|CODEX_UNAVAILABLE|INVALID_VERIFICATION_URL)$/.test(error.message)
+    const code = error instanceof Error && /^(LOGIN_EXPIRED|LOGIN_CANCELLED|CODEX_AUTH_UNAVAILABLE|CODEX_AUTH_FORBIDDEN|CODEX_AUTH_FAILED|CODEX_UNAVAILABLE|INVALID_VERIFICATION_URL)$/.test(error.message)
       ? error.message : 'LOGIN_FAILED';
     await repository.fail(request.id, code);
   } finally {

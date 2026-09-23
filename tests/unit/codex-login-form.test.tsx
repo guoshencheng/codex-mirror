@@ -5,6 +5,21 @@ import ManagedAccountForm from '../../src/components/managed-account-form';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Codex account option', () => {
+  it('explains an upstream 403 without blaming the account setting', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/provider-accounts/codex-login' && !init?.method) return Response.json({ login: null });
+      if (url === '/api/auth/session') return Response.json({ csrfToken: 'x'.repeat(43) });
+      if (url === '/api/provider-accounts/codex-login' && init?.method === 'POST')
+        return Response.json({ id: '11111111-1111-4111-8111-111111111111', status: 'queued' }, { status: 202 });
+      return Response.json({ id: '11111111-1111-4111-8111-111111111111', status: 'failed', error: 'CODEX_AUTH_FORBIDDEN' });
+    }));
+    render(<ManagedAccountForm onSaved={vi.fn(async () => {})} />);
+    fireEvent.click(screen.getByRole('button', { name: '登录 Codex' }));
+    fireEvent.change(screen.getByLabelText('账号名称'), { target: { value: 'Personal' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始 Codex 登录' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('服务器所在地区'));
+  });
+
   it('shows device login instead of an API key field', () => {
     render(<ManagedAccountForm onSaved={vi.fn(async () => {})} />);
     fireEvent.click(screen.getByRole('button', { name: '登录 Codex' }));

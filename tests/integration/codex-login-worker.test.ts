@@ -49,6 +49,12 @@ describe('Codex login worker', () => {
       expect((await repository.read(failed.id, admin!.sessionId))?.status).toBe('failed');
       expect((await pool.query('SELECT id FROM provider_accounts WHERE id = $1', [failed.accountId])).rowCount).toBe(0);
       await expect(access(join(runtimeRoot, failed.accountId))).rejects.toThrow();
+      const forbidden = await repository.create(admin!.sessionId, 'Forbidden account');
+      await processCodexLoginOnce(pool, new AbortController().signal, {
+        runtimeRoot,
+        login: async () => { throw new Error('CODEX_AUTH_FORBIDDEN'); },
+      });
+      expect((await repository.read(forbidden.id, admin!.sessionId))?.error).toBe('CODEX_AUTH_FORBIDDEN');
       const interrupted = await repository.create(admin!.sessionId, 'Interrupted account');
       let release!: () => void;
       const gate = new Promise<void>(resolve => { release = resolve; });

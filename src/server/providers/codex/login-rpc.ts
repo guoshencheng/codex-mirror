@@ -70,7 +70,13 @@ export async function startCodexDeviceLogin(
     const waiter = pending.get(message.id as number);
     if (!waiter) return;
     pending.delete(message.id as number);
-    if (message.error !== undefined) waiter.reject(new Error('CODEX_AUTH_UNAVAILABLE'));
+    if (message.error !== undefined) {
+      const upstream = message.error as Record<string, unknown> | null;
+      const forbidden = message.method === undefined &&
+        upstream && typeof upstream.message === 'string' &&
+        /device code request failed with status 403(?:\s|$)/i.test(upstream.message);
+      waiter.reject(new Error(forbidden ? 'CODEX_AUTH_FORBIDDEN' : 'CODEX_AUTH_UNAVAILABLE'));
+    }
     else if (!('result' in message)) waiter.reject(new Error('INVALID_PROTOCOL'));
     else waiter.resolve(message.result);
   });
