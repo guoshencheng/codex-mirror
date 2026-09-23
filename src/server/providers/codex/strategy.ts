@@ -10,7 +10,7 @@ import type {
 } from '../../../contracts/quota';
 import { ProviderTransportError } from '../http';
 import { validateProviderSnapshot } from '../metric-schema';
-import { CodexRpc } from './rpc';
+import type { CodexUsageApi } from './usage-api';
 
 const quotaWindowSchema = z.object({
   usedPercent: z.number().finite().min(0).max(100),
@@ -95,7 +95,7 @@ export class CodexQuotaStrategy implements QuotaProviderStrategy {
   };
 
   constructor(
-    private readonly rpcForAccount: (accountId: string) => Pick<CodexRpc, 'readRateLimits'>,
+    private readonly rpcForAccount: (accountId: string) => Pick<CodexUsageApi, 'readRateLimits'>,
     private readonly now: () => Date = () => new Date(),
   ) {}
 

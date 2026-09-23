@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileSecretStore } from '../../src/server/providers/secret-store';
 import { requestJson, ProviderTransportError } from '../../src/server/providers/http';
-import { CodexRpc } from '../../src/server/providers/codex/rpc';
+import { CodexUsageApi } from '../../src/server/providers/codex/usage-api';
 import { KimiUsageClient } from '../../src/server/providers/kimi-code/client';
 
 const servers: Server[] = [];
@@ -108,42 +108,94 @@ describe('KimiUsageClient', () => {
   });
 });
 
-describe('CodexRpc', () => {
-  it('initializes once, announces initialized, and matches the requested response id', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'codex-app-server-'));
-    const executable = join(home, 'fake-codex');
-    const source = `#!/usr/bin/env node
-const readline = require('node:readline');
-const rl = readline.createInterface({ input: process.stdin });
-let initialized = false;
-rl.on('line', line => {
-  const req = JSON.parse(line);
-  if (req.method === 'initialize') {
-    process.stdout.write(JSON.stringify({ id: req.id, result: {} }) + '\\n');
-  } else if (req.method === 'initialized') {
-    initialized = true;
-  } else if (req.method === 'account/rateLimits/read' && initialized) {
-    process.stdout.write(JSON.stringify({ method: 'account/rateLimits/updated', params: {} }) + '\\n');
-    process.stdout.write(JSON.stringify({ id: 77, result: { ignored: true } }) + '\\n');
-    process.stdout.write(JSON.stringify({ id: req.id, result: { rateLimitsByLimitId: { codex: { primary: null } } } }) + '\\n');
-    setImmediate(() => process.exit(0));
+describe('CodexUsageApi', () => {
+  const AUTH_DOC = {
+    auth_mode: 'chatgpt',
+    tokens: { access_token: 'access-canary', refresh_token: 'refresh-canary', account_id: 'account-canary' },
+  };
+
+  async function authHome(doc: unknown = AUTH_DOC): Promise<string> {
+    const home = await mkdtemp(join(tmpdir(), 'codex-usage-'));
+    await writeFile(join(home, 'auth.json'), JSON.stringify(doc), { mode: 0o600 });
+    return home;
   }
-});`;
-    await writeFile(executable, source, { mode: 0o700 });
-    const raw = await new CodexRpc(home, executable).readRateLimits(new AbortController().signal, 5000);
-    expect(raw).toEqual({ rateLimitsByLimitId: { codex: { primary: null } } });
+
+  it('reads usage with the stored bearer token and normalizes both windows', async () => {
+    let authorization = '';
+    let accountId = '';
+    const usageUrl = await serve((req, res) => {
+      authorization = String(req.headers.authorization);
+      accountId = String(req.headers['chatgpt-account-id']);
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        rate_limit: {
+          primary_window: { used_percent: 72, limit_window_seconds: 18000, reset_at: 1_700_000_000 },
+          secondary_window: { used_percent: 38, limit_window_seconds: 604800, reset_at: '2026-08-18T00:00:00Z' },
+        },
+      }));
+    });
+    const home = await authHome();
+    const raw = await new CodexUsageApi(home, usageUrl).readRateLimits(new AbortController().signal, 5000);
+
+    expect(authorization).toBe('Bearer access-canary');
+    expect(accountId).toBe('account-canary');
+    expect(raw).toEqual({
+      rateLimits: {
+        primary: { usedPercent: 72, windowDurationMins: 300, resetsAt: 1_700_000_000 },
+        secondary: { usedPercent: 38, windowDurationMins: 10080, resetsAt: Math.floor(Date.parse('2026-08-18T00:00:00Z') / 1000) },
+      },
+    });
   });
 
-  it('times out a process that never answers and rejects an exited process', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'codex-app-server-'));
-    const silent = join(home, 'silent-codex');
-    await writeFile(silent, '#!/usr/bin/env node\nprocess.stdin.resume();\n', { mode: 0o700 });
-    await expect(new CodexRpc(home, silent).readRateLimits(new AbortController().signal, 30))
-      .rejects.toMatchObject({ code: 'TIMEOUT' });
+  it('refreshes an expired token, retries, and persists the new tokens', async () => {
+    let usageCalls = 0;
+    let refreshBody = '';
+    const usageUrl = await serve((_req, res) => {
+      usageCalls += 1;
+      if (usageCalls === 1) { res.writeHead(401).end(); return; }
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        rate_limit: { primary_window: { used_percent: 5, limit_window_seconds: 18000, reset_at: null } },
+      }));
+    });
+    const refreshUrl = await serve(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      refreshBody = Buffer.concat(chunks).toString('utf8');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ access_token: 'access-renewed', refresh_token: 'refresh-renewed' }));
+    });
+    const home = await authHome();
+    const raw = await new CodexUsageApi(home, usageUrl, refreshUrl).readRateLimits(new AbortController().signal, 5000);
 
-    const exited = join(home, 'exited-codex');
-    await writeFile(exited, '#!/usr/bin/env node\nprocess.exit(7);\n', { mode: 0o700 });
-    await expect(new CodexRpc(home, exited).readRateLimits(new AbortController().signal, 5000))
-      .rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    expect(usageCalls).toBe(2);
+    expect(refreshBody).toContain('grant_type=refresh_token');
+    expect(refreshBody).toContain('refresh_token=refresh-canary');
+    expect(raw).toMatchObject({ rateLimits: { primary: { usedPercent: 5 } } });
+    const persisted = JSON.parse(await readFile(join(home, 'auth.json'), 'utf8'));
+    expect(persisted.tokens.access_token).toBe('access-renewed');
+    expect(persisted.tokens.refresh_token).toBe('refresh-renewed');
+    expect(persisted.tokens.account_id).toBe('account-canary');
+  });
+
+  it('fails without stored credentials or a usable refresh token', async () => {
+    const missing = await mkdtemp(join(tmpdir(), 'codex-usage-'));
+    await expect(new CodexUsageApi(missing, 'http://127.0.0.1:1').readRateLimits(new AbortController().signal, 500))
+      .rejects.toMatchObject({ code: 'AUTH_EXPIRED' });
+
+    const usageUrl = await serve((_req, res) => { res.writeHead(401).end(); });
+    const noRefresh = await authHome({ tokens: { access_token: 'access-canary', account_id: 'account-canary' } });
+    await expect(new CodexUsageApi(noRefresh, usageUrl).readRateLimits(new AbortController().signal, 500))
+      .rejects.toMatchObject({ code: 'AUTH_EXPIRED' });
+  });
+
+  it('rejects a malformed usage payload', async () => {
+    const usageUrl = await serve((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ rate_limit: {} }));
+    });
+    const home = await authHome();
+    await expect(new CodexUsageApi(home, usageUrl).readRateLimits(new AbortController().signal, 5000))
+      .rejects.toMatchObject({ code: 'SCHEMA_CHANGED' });
   });
 });

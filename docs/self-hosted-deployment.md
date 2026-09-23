@@ -21,6 +21,8 @@
 
 `private/.env` 中的 `PROVIDER_CREDENTIAL_KEY` 用于解密数据库中的 DeepSeek/Kimi API Key，必须连同数据库备份长期保存。`private/provider-accounts.json` 和 `private/secrets/` 管理文件配置的 Provider；Web 新增的管理账号由 worker 自动刷新。Codex/Kimi CLI 授权位于 Compose 的 `runtime-auth` 卷。
 
+worker 的 Codex 额度读取直接请求 ChatGPT 用量 API（`chatgpt.com/backend-api/wham/usage`），凭据为账号目录中的 `auth.json`，访问令牌过期时由 worker 自行刷新。若部署机无法直连 OpenAI，在 `private/.env` 设置 `WORKER_PROXY=http://<代理地址>:<端口>`（可选 `WORKER_NO_PROXY`，默认 `localhost,127.0.0.1,db`），worker 的全部出站 HTTPS 会经该代理；代理只作用于 worker 容器，宿主机与其他容器不受影响。
+
 ### 在看板中添加 Codex 账号
 
 管理员登录后打开“面板菜单 → 添加账号 → 登录 Codex”，输入账号名称并开始登录。看板显示 OpenAI 官方验证网址和一次性代码；在新窗口完成 ChatGPT 授权后，worker 会读取额度并把账号加入看板。此流程使用 ChatGPT 套餐的 Codex 登录，凭据只存于 worker 的 `runtime-auth` 卷，网页和数据库不保存 OAuth 令牌。

@@ -2,7 +2,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { ProviderAccountConfig } from '../../contracts/quota';
-import { CodexRpc } from './codex/rpc';
+import { CodexUsageApi } from './codex/usage-api';
 import { CodexQuotaStrategy } from './codex/strategy';
 import { DeepSeekBalanceStrategy } from './deepseek/strategy';
 import { KimiCodeQuotaStrategy } from './kimi-code/strategy';
@@ -56,7 +56,7 @@ export function makeProviderRegistry(options: {
     return {
       readRateLimits: async signal => {
         await mkdir(home, { recursive: true, mode: 0o700 });
-        return new CodexRpc(home).readRateLimits(signal);
+        return new CodexUsageApi(home).readRateLimits(signal);
       },
     };
   }));
