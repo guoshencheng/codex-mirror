@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pool } from 'pg';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAdminSession, requireAdmin } from '../../src/server/auth/session';
 import { sessionCookieName } from '../../src/server/auth/cookie';
 import { CodexLoginRepository } from '../../src/server/providers/codex/login-repository';
@@ -49,6 +49,21 @@ describe('Codex login worker', () => {
       expect((await repository.read(failed.id, admin!.sessionId))?.status).toBe('failed');
       expect((await pool.query('SELECT id FROM provider_accounts WHERE id = $1', [failed.accountId])).rowCount).toBe(0);
       await expect(access(join(runtimeRoot, failed.accountId))).rejects.toThrow();
+      const interrupted = await repository.create(admin!.sessionId, 'Interrupted account');
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const controller = new AbortController();
+      const login = vi.fn(async () => { throw new Error('SHOULD_NOT_LOGIN'); });
+      const task = processCodexLoginOnce(pool, controller.signal, {
+        runtimeRoot,
+        claim: async repo => { await gate; return repo.claimNext(); },
+        login,
+      });
+      controller.abort();
+      release();
+      await task;
+      expect(login).not.toHaveBeenCalled();
+      expect((await repository.read(interrupted.id, admin!.sessionId))?.status).toBe('failed');
     } finally {
       await rm(runtimeRoot, { recursive: true, force: true });
       await pool.end();

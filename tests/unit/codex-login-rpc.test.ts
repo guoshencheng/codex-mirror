@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +23,14 @@ rl.on('line', line => {
 });`;
   await writeFile(executable, source, { mode: 0o700 });
   return { home, executable };
+}
+
+async function waitPid(path: string): Promise<number> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    try { return Number(await readFile(path, 'utf8')); }
+    catch { await new Promise(resolve => setTimeout(resolve, 10)); }
+  }
+  throw new Error('FAKE_CODEX_DID_NOT_START');
 }
 
 describe('Codex device login RPC', () => {
@@ -71,5 +79,37 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     controller.abort();
     await expect(startCodexDeviceLogin(home, controller.signal, () => {}, executable, 5000))
       .rejects.toThrow('LOGIN_CANCELLED');
+  });
+
+  it('waits for a slow child to exit before returning on timeout', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-login-test-'));
+    const executable = join(home, 'slow-codex');
+    const pidFile = join(home, 'pid');
+    await writeFile(executable, `#!/usr/bin/env node
+require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+process.on('SIGTERM', () => setTimeout(() => process.exit(0), 200));
+process.stdin.resume();`, { mode: 0o700 });
+    const controller = new AbortController();
+    const login = startCodexDeviceLogin(home, controller.signal, () => {}, executable, 5000);
+    const pid = await waitPid(pidFile);
+    controller.abort();
+    await expect(login).rejects.toThrow('LOGIN_CANCELLED');
+    expect(() => process.kill(pid, 0)).toThrow();
+  });
+
+  it('force kills a child that ignores SIGTERM', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-login-test-'));
+    const executable = join(home, 'stubborn-codex');
+    const pidFile = join(home, 'pid');
+    await writeFile(executable, `#!/usr/bin/env node
+require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+process.on('SIGTERM', () => {});
+process.stdin.resume();`, { mode: 0o700 });
+    const controller = new AbortController();
+    const login = startCodexDeviceLogin(home, controller.signal, () => {}, executable, 5000);
+    const pid = await waitPid(pidFile);
+    controller.abort();
+    await expect(login).rejects.toThrow('LOGIN_CANCELLED');
+    expect(() => process.kill(pid, 0)).toThrow();
   });
 });

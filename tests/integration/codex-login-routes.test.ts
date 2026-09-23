@@ -7,7 +7,7 @@ import { sessionCookieName } from '../../src/server/auth/cookie';
 
 const holder = vi.hoisted(() => ({ pool: null as Pool | null }));
 vi.mock('../../src/server/events/database', () => ({ eventDatabasePool: () => holder.pool }));
-import { POST } from '../../src/app/api/provider-accounts/codex-login/route';
+import { GET as GET_ACTIVE, POST } from '../../src/app/api/provider-accounts/codex-login/route';
 import { GET, DELETE } from '../../src/app/api/provider-accounts/codex-login/[id]/route';
 
 afterEach(() => { holder.pool = null; });
@@ -41,6 +41,10 @@ describe('Codex login routes', () => {
       expect(created.status).toBe(202);
       expect(created.headers.get('cache-control')).toBe('private, no-store');
       const body = await created.json() as { id: string };
+      const active = await GET_ACTIVE(new Request(base, { headers: { Cookie: `${sessionCookieName()}=${first.token}` } }));
+      expect(await active.json()).toMatchObject({ login: { id: body.id, status: 'queued' } });
+      const otherActive = await GET_ACTIVE(new Request(base, { headers: { Cookie: `${sessionCookieName()}=${second.token}` } }));
+      expect(await otherActive.json()).toEqual({ login: null });
       const context = { params: Promise.resolve({ id: body.id }) };
       const other = await GET(new Request(`${base}/${body.id}`, { headers: { Cookie: `${sessionCookieName()}=${second.token}` } }), context);
       expect(other.status).toBe(404);

@@ -108,6 +108,15 @@ export async function startCodexDeviceLogin(
     signal.removeEventListener('abort', abort);
     closed = true;
     lines.close();
-    if (child.exitCode === null && !child.killed) child.kill('SIGTERM');
+    if (child.exitCode === null && child.signalCode === null) {
+      if (!child.killed) child.kill('SIGTERM');
+      await new Promise<void>(resolve => {
+        if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
+        const force = setTimeout(() => {
+          if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        }, 250);
+        child.once('exit', () => { clearTimeout(force); resolve(); });
+      });
+    }
   }
 }

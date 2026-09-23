@@ -68,6 +68,13 @@ export class CodexLoginRepository {
     return result.rows[0] ? mapped(result.rows[0]) : null;
   }
 
+  async readActive(sessionId: string): Promise<CodexLoginRequest | null> {
+    const result = await this.pool.query(`SELECT * FROM codex_login_requests WHERE session_id = $1
+      AND status IN ('queued','starting','awaiting') AND expires_at > now()
+      ORDER BY created_at DESC LIMIT 1`, [sessionId]);
+    return result.rows[0] ? mapped(result.rows[0]) : null;
+  }
+
   async cancel(id: string, sessionId: string): Promise<boolean> {
     const result = await this.pool.query(`UPDATE codex_login_requests SET status = 'cancelled', updated_at = now(),
       verification_url = NULL, user_code = NULL WHERE id = $1 AND session_id = $2

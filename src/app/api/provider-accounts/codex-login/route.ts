@@ -9,6 +9,16 @@ export const dynamic = 'force-dynamic';
 const NO_STORE = { 'Cache-Control': 'private, no-store' };
 const input = z.object({ label: z.string().trim().min(1).max(120) }).strict();
 
+export async function GET(request: Request): Promise<Response> {
+  const pool = eventDatabasePool();
+  try {
+    const admin = await requireAdmin(request, pool);
+    if (!admin) return Response.json({ error: 'UNAUTHORIZED' }, { status: 401, headers: NO_STORE });
+    const login = await new CodexLoginRepository(pool).readActive(admin.sessionId);
+    return Response.json({ login: login ? publicCodexLogin(login) : null }, { headers: NO_STORE });
+  } catch { return Response.json({ error: 'LOGIN_UNAVAILABLE' }, { status: 503, headers: NO_STORE }); }
+}
+
 export async function POST(request: Request): Promise<Response> {
   const pool = eventDatabasePool();
   let admin;

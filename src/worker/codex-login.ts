@@ -1,13 +1,14 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import type { Pool } from 'pg';
-import { CodexLoginRepository } from '../server/providers/codex/login-repository';
+import { CodexLoginRepository, type CodexLoginRequest } from '../server/providers/codex/login-repository';
 import { startCodexDeviceLogin, type DeviceCode } from '../server/providers/codex/login-rpc';
 import { normalizeCodex } from '../server/providers/codex/strategy';
 
 interface LoginDeps {
   runtimeRoot?: string;
   login?: typeof startCodexDeviceLogin;
+  claim?: (repository: CodexLoginRepository) => Promise<CodexLoginRequest | null>;
 }
 
 function runtimeHome(root: string, accountId: string): string {
@@ -24,12 +25,17 @@ export async function cleanupCodexLoginHome(root: string, accountId: string): Pr
 
 export async function processCodexLoginOnce(pool: Pool, signal: AbortSignal, deps: LoginDeps = {}): Promise<boolean> {
   const repository = new CodexLoginRepository(pool);
-  const request = await repository.claimNext();
+  const request = await (deps.claim?.(repository) ?? repository.claimNext());
   if (!request) return false;
+  if (signal.aborted) {
+    await repository.fail(request.id, 'LOGIN_CANCELLED');
+    return true;
+  }
   const home = runtimeHome(deps.runtimeRoot ?? process.env.CODEX_RUNTIME_ROOT ?? '/var/lib/dashboard-auth/codex', request.accountId);
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal.addEventListener('abort', abort, { once: true });
+  if (signal.aborted) controller.abort();
   const poll = setInterval(() => {
     void repository.status(request.id).then(status => {
       if (status !== 'starting' && status !== 'awaiting') controller.abort();
@@ -37,7 +43,9 @@ export async function processCodexLoginOnce(pool: Pool, signal: AbortSignal, dep
   }, 1000);
   let saved = false;
   try {
+    if (controller.signal.aborted) throw new Error('LOGIN_CANCELLED');
     await mkdir(home, { recursive: true, mode: 0o700 });
+    if (controller.signal.aborted) throw new Error('LOGIN_CANCELLED');
     const outcome = await (deps.login ?? startCodexDeviceLogin)(home, controller.signal, async (code: DeviceCode) => {
       const updated = await repository.markAwaiting(request.id, code.verificationUrl, code.userCode, code.loginId);
       if (!updated) { controller.abort(); throw new Error('LOGIN_CANCELLED'); }

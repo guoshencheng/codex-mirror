@@ -39,6 +39,20 @@ export default function CodexLoginForm({ onSaved, onBack }: { onSaved(done: bool
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let stopped = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/provider-accounts/codex-login', { credentials: 'same-origin', cache: 'no-store' });
+        if (response.status === 401) { window.location.assign('/login'); return; }
+        if (!response.ok) return;
+        const body = await response.json() as { login?: LoginState | null };
+        if (!stopped && body.login && active.has(body.login.status)) setLogin(current => current ?? body.login ?? null);
+      } catch { /* The start action can still report its own error. */ }
+    })();
+    return () => { stopped = true; };
+  }, []);
+
+  useEffect(() => {
     if (!login || !active.has(login.status)) return;
     let stopped = false;
     const poll = async () => {
@@ -83,9 +97,11 @@ export default function CodexLoginForm({ onSaved, onBack }: { onSaved(done: bool
     setBusy(true);
     try {
       const token = await csrfToken();
-      await fetch(`/api/provider-accounts/codex-login/${encodeURIComponent(login.id)}`, {
+      const response = await fetch(`/api/provider-accounts/codex-login/${encodeURIComponent(login.id)}`, {
         method: 'DELETE', credentials: 'same-origin', cache: 'no-store', headers: { 'X-CSRF-Token': token },
       });
+      if (response.status === 401) { window.location.assign('/login'); return; }
+      if (!response.ok) throw new Error('取消失败');
       setLogin(null);
     } catch { setError('取消失败，请稍后重试。'); }
     finally { setBusy(false); }
