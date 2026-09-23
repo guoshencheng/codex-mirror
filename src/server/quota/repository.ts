@@ -30,7 +30,7 @@ export class QuotaRepository {
         `, [account.id, account.providerId, account.label, account.credentialRef, JSON.stringify(account.options)]);
         await client.query('INSERT INTO quota_refresh_status (account_id) VALUES ($1) ON CONFLICT DO NOTHING', [account.id]);
       }
-      await client.query('UPDATE provider_accounts SET enabled = false, updated_at = now() WHERE NOT (id = ANY($1::text[]))', [ids]);
+      await client.query("UPDATE provider_accounts SET enabled = false, updated_at = now() WHERE credential_ref NOT LIKE 'db:%' AND credential_ref <> 'managed-codex-login' AND NOT (id = ANY($1::text[]))", [ids]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
