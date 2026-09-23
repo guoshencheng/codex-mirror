@@ -120,12 +120,12 @@ export class CodexLoginRepository {
       WHERE id = $1 AND status IN ('queued','starting','awaiting')`, [id, code]);
   }
 
-  async recoverStale(): Promise<void> {
+  async recoverStale(restarted = false): Promise<void> {
     await this.pool.query(`UPDATE codex_login_requests SET status = 'expired', error_code = 'LOGIN_EXPIRED',
       verification_url = NULL, user_code = NULL, updated_at = now()
       WHERE status IN ('queued','starting','awaiting') AND expires_at <= now()`);
-    await this.pool.query(`UPDATE codex_login_requests SET status = 'failed', error_code = 'WORKER_RESTARTED',
+    if (restarted) await this.pool.query(`UPDATE codex_login_requests SET status = 'failed', error_code = 'WORKER_RESTARTED',
       verification_url = NULL, user_code = NULL, updated_at = now()
-      WHERE status IN ('starting','awaiting') AND updated_at < now() - interval '2 minutes'`);
+      WHERE status IN ('starting','awaiting')`);
   }
 }
