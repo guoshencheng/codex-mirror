@@ -9,7 +9,7 @@ import { cleanupAgentEvents } from '../server/events/retention';
 import { managedStrategy } from '../server/providers/managed';
 import { readManagedCredential } from '../server/providers/managed-credentials';
 import { CodexLoginRepository } from '../server/providers/codex/login-repository';
-import { processCodexLoginOnce } from './codex-login';
+import { cleanupCodexLoginHome, processCodexLoginOnce } from './codex-login';
 import type { ProviderAccountConfig } from '../contracts/quota';
 import type { Pool } from 'pg';
 
@@ -58,7 +58,10 @@ export async function runWorker(signal: AbortSignal): Promise<void> {
   validateProviderAccounts(accounts, registry);
   await repository.upsertConfiguredAccounts(accounts);
   const loginRepository = new CodexLoginRepository(pool);
-  await loginRepository.recoverStale(true);
+  const recovered = await loginRepository.recoverStale(true);
+  for (const accountId of recovered) {
+    await cleanupCodexLoginHome(process.env.CODEX_RUNTIME_ROOT ?? '/var/lib/dashboard-auth/codex', accountId);
+  }
   let loginTask: Promise<void> | null = null;
 
   let nextCleanupAt = Date.now() + 24 * 60 * 60 * 1000;

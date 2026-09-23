@@ -32,6 +32,11 @@ describe('Codex login requests', () => {
       await expect(repository.create(firstId, 'Again')).rejects.toThrow('LOGIN_IN_PROGRESS');
       expect((await repository.claimNext())?.id).toBe(request.id);
       expect(await repository.claimNext()).toBeNull();
+      await pool.query("UPDATE codex_login_requests SET expires_at = now() - interval '1 second' WHERE id = $1", [request.id]);
+      const restarted = await repository.create(firstId, 'After expiry');
+      expect(restarted.status).toBe('queued');
+      expect((await repository.claimNext())?.id).toBe(restarted.id);
+      expect(await repository.recoverStale(true)).toContain(restarted.accountId);
       await pool.query("INSERT INTO provider_accounts(id, provider_id, label, credential_ref) VALUES ($1, 'codex', 'Personal', 'managed-codex-login')", [request.accountId]);
       await new QuotaRepository(pool).upsertConfiguredAccounts([]);
       const account = await pool.query('SELECT enabled FROM provider_accounts WHERE id = $1', [request.accountId]);

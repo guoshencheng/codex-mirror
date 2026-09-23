@@ -44,6 +44,9 @@ export class CodexLoginRepository {
     try {
       await client.query('BEGIN');
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('codex-login-create', 0))");
+      await client.query(`UPDATE codex_login_requests SET status = 'expired', error_code = 'LOGIN_EXPIRED',
+        verification_url = NULL, user_code = NULL, updated_at = now()
+        WHERE status IN ('queued','starting','awaiting') AND expires_at <= now()`);
       const existing = await client.query("SELECT 1 FROM codex_login_requests WHERE session_id = $1 AND status IN ('queued','starting','awaiting')", [sessionId]);
       if (existing.rowCount) throw new Error('LOGIN_IN_PROGRESS');
       const count = await client.query("SELECT count(*)::int AS n FROM codex_login_requests WHERE status IN ('queued','starting','awaiting')");
@@ -120,12 +123,16 @@ export class CodexLoginRepository {
       WHERE id = $1 AND status IN ('queued','starting','awaiting')`, [id, code]);
   }
 
-  async recoverStale(restarted = false): Promise<void> {
-    await this.pool.query(`UPDATE codex_login_requests SET status = 'expired', error_code = 'LOGIN_EXPIRED',
+  async recoverStale(restarted = false): Promise<string[]> {
+    const expired = await this.pool.query(`UPDATE codex_login_requests SET status = 'expired', error_code = 'LOGIN_EXPIRED',
       verification_url = NULL, user_code = NULL, updated_at = now()
-      WHERE status IN ('queued','starting','awaiting') AND expires_at <= now()`);
-    if (restarted) await this.pool.query(`UPDATE codex_login_requests SET status = 'failed', error_code = 'WORKER_RESTARTED',
+      WHERE status IN ('queued','starting','awaiting') AND expires_at <= now() RETURNING account_id`);
+    let interrupted: { rows: Array<{ account_id: string }> } = { rows: [] };
+    if (restarted) interrupted = await this.pool.query(`UPDATE codex_login_requests SET status = 'failed', error_code = 'WORKER_RESTARTED',
       verification_url = NULL, user_code = NULL, updated_at = now()
-      WHERE status IN ('starting','awaiting')`);
+      WHERE status IN ('starting','awaiting') RETURNING account_id`);
+    await this.pool.query(`DELETE FROM codex_login_requests WHERE status IN ('succeeded','failed','cancelled','expired')
+      AND updated_at < now() - interval '1 day'`);
+    return [...expired.rows, ...interrupted.rows].map(row => String(row.account_id));
   }
 }

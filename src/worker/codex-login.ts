@@ -18,6 +18,10 @@ function runtimeHome(root: string, accountId: string): string {
   return home;
 }
 
+export async function cleanupCodexLoginHome(root: string, accountId: string): Promise<void> {
+  await rm(runtimeHome(root, accountId), { recursive: true, force: true });
+}
+
 export async function processCodexLoginOnce(pool: Pool, signal: AbortSignal, deps: LoginDeps = {}): Promise<boolean> {
   const repository = new CodexLoginRepository(pool);
   const request = await repository.claimNext();
@@ -50,7 +54,7 @@ export async function processCodexLoginOnce(pool: Pool, signal: AbortSignal, dep
     clearInterval(poll);
     signal.removeEventListener('abort', abort);
     controller.abort();
-    if (!saved) await rm(home, { recursive: true, force: true }).catch(() => undefined);
+    if (!saved) await cleanupCodexLoginHome(deps.runtimeRoot ?? process.env.CODEX_RUNTIME_ROOT ?? '/var/lib/dashboard-auth/codex', request.accountId).catch(() => undefined);
   }
   return true;
 }
