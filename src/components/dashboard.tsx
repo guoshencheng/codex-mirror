@@ -73,8 +73,9 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
   const title = offline ? '连接待恢复' : waiting ? '等你点个头' : working.length ? '正在工作' : uncertain ? '状态待确认' : '正在待命';
   const priority = (state: string) => state === 'WAITING_APPROVAL' ? 0 : state === 'WORKING' ? 1 : 2;
   const sessions = [...data.sessions].sort((a, b) => priority(a.state) - priority(b.state) || b.lastEventAt.localeCompare(a.lastEventAt));
+  const listedSessions = sessions.slice(0, 12);
   const accountPages = Math.max(1, Math.ceil(data.accounts.length / 3));
-  const sessionPages = Math.max(1, Math.ceil(sessions.length / 6));
+  const sessionPages = Math.max(1, Math.ceil(listedSessions.length / 6));
   const visibleAccountPage = Math.min(accountPage, accountPages - 1);
   const visibleSessionPage = Math.min(sessionPage, sessionPages - 1);
   const selectedAccount = detail?.kind === 'account' ? data.accounts.find(account => account.id === detail.id) : undefined;
@@ -152,12 +153,12 @@ export default function Dashboard({ initial, readOnly = false }: DashboardProps)
             {!data.accounts.length ? <p className={styles.empty}>尚未配置额度账号</p> : null}
           </section>
           <section className={styles.sessions} aria-labelledby="sessions-heading">
-            <div className={styles.sectionHead}><h2 id="sessions-heading">会话 <small>/ {sessions.length}</small></h2>
+            <div className={styles.sectionHead}><h2 id="sessions-heading">会话 <small>/ {listedSessions.length}</small></h2>
               <span>{waiting} 待审批 · {working.length} 执行中</span>
               <Pager page={visibleSessionPage} pages={sessionPages} label="会话" onChange={setSessionPage} />
             </div>
             <ul className={styles.sessionList} aria-label="会话">
-              {sessions.slice(visibleSessionPage * 6, visibleSessionPage * 6 + 6).map(session => {
+              {listedSessions.slice(visibleSessionPage * 6, visibleSessionPage * 6 + 6).map(session => {
                 const device = devicesById.get(session.deviceId);
                 const currentState = isCurrentSession(session, device, syncHealthy);
                 const label = `${currentState ? '' : '最近：'}${sessionLabels[session.state]}`;

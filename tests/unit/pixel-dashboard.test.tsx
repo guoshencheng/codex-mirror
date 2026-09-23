@@ -47,6 +47,19 @@ describe('compact pixel dashboard', () => {
     expect(within(sessions).getByText('Task 0')).toBeInTheDocument();
   });
 
+  it('shows at most two pages of sessions', () => {
+    const snapshot = data();
+    snapshot.sessions = Array.from({ length: 13 }, (_, i) => session(String(i)));
+    render(<Dashboard initial={snapshot} />);
+    const list = screen.getByRole('list', { name: '会话' });
+    expect(screen.getByLabelText('会话页码')).toHaveTextContent('1/2');
+    fireEvent.click(screen.getByRole('button', { name: '下一页会话' }));
+    expect(screen.getByLabelText('会话页码')).toHaveTextContent('2/2');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(list).queryByText('Task 12')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下一页会话' })).toBeDisabled();
+  });
+
   it.each(['offline', 'unconfirmed', 'incomplete', 'disconnected'])('does not present %s task state as current activity', reason => {
     const snapshot = data(); snapshot.sessions = [session('old')];
     if (reason === 'offline') snapshot.devices[0].connection = 'offline';
