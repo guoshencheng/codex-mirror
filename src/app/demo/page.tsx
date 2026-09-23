@@ -41,7 +41,7 @@ function demoDashboard(): DashboardDto {
       id: item.id, providerId: item.providerId, label: item.label, deviceIds: ['demo-mac'],
       snapshot: { accountId: item.id, providerId: item.providerId, observedAt, serviceAvailable: true, metrics: [
         { kind: 'quota-window' as const, key: 'five-hour', label: '5-hour limit', usedPercent: 100 - item.fiveHour, windowDurationSeconds: 18_000, resetsAt: null },
-        { kind: 'quota-window' as const, key: 'weekly', label: 'Weekly', usedPercent: 100 - item.weekly, windowDurationSeconds: 604_800, resetsAt: null },
+        { kind: 'quota-window' as const, key: 'weekly', label: item.id === 'demo-kimi' ? '套餐额度' : 'Weekly', usedPercent: 100 - item.weekly, windowDurationSeconds: item.id === 'demo-kimi' ? null : 604_800, resetsAt: null },
       ] },
       lastAttemptAt: observedAt, lastSuccessAt: observedAt, errorCode: null, refreshStatus: 'idle' as const,
     })),

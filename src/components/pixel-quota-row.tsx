@@ -10,7 +10,8 @@ function CompactMetric({ metric }: { metric: QuotaMetric }) {
     </span>;
   }
   const label = metric.windowDurationSeconds === 18_000 ? '5H'
-    : metric.windowDurationSeconds === 604_800 ? '周' : metric.label;
+    : metric.windowDurationSeconds === 604_800 ? '周'
+      : metric.label.length > 2 && metric.label.endsWith('额度') ? metric.label.slice(0, -2) : metric.label;
   if (metric.usedPercent === null || !Number.isFinite(metric.usedPercent)) {
     return <span className={styles.metric} title={`${metric.label}：额度数据不可用`}><small>{label}</small><span>不可用</span></span>;
   }

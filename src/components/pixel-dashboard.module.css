@@ -10,7 +10,8 @@
   overflow: hidden;
   background: #151f23;
   color: #e1e9d3;
-  font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Code', 'PingFang SC', monospace;
+  font-family: 'Noto Sans SC Variable', sans-serif;
+  font-synthesis: none;
   container-type: size;
   isolation: isolate;
   max-width: none;
@@ -69,9 +70,10 @@
 .topbar h1 {
   margin: 0;
   color: #e1e9d3;
-  font-size: 14px;
+  font-family: 'JetBrains Mono Variable', monospace;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: .04em;
 }
 
 .topActions,
@@ -138,7 +140,7 @@
   overflow: hidden;
   margin: 0;
   color: #e1e9d3;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -152,7 +154,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.timer { flex: 0 0 auto; color: var(--accent); font-size: 10px; }
+.timer { flex: 0 0 auto; color: var(--accent); font-family: 'JetBrains Mono Variable', monospace; font-size: 10px; font-variant-numeric: tabular-nums; }
 
 .quota {
   display: flex;
@@ -212,25 +214,25 @@
   align-items: center;
   gap: 3px;
 }
-.providerName > span { display: flex; min-width: 0; flex-direction: column; overflow: hidden; font-size: 8px; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.providerName > span { display: flex; min-width: 0; flex-direction: column; overflow: hidden; font-size: 9px; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .providerName small {
   display: block;
   overflow: hidden;
   color: #81998c;
-  font-size: 7px;
+  font-size: 7.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .metrics { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 2px; }
 .metric { display: flex; min-width: 0; flex: 1; align-items: center; gap: 2px; white-space: nowrap; }
 .metric small,
-.balance small { color: #81998c; font-size: 8px; }
+.balance small { min-width: 0; max-width: 25px; overflow: hidden; color: #94a99d; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .metric > span:not(.ring) { overflow: hidden; color: #efc57d; font-size: 9px; text-overflow: ellipsis; }
-.metric strong { min-width: 23px; color: #c5d6bb; font-size: 8px; font-weight: 500; text-align: right; }
+.metric strong { min-width: 23px; flex: 0 0 auto; color: #d5e3ce; font-family: 'JetBrains Mono Variable', monospace; font-size: 8px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 .ring { position: relative; width: 12px; height: 12px; flex: 0 0 12px; border-radius: 50%; }
 .ring::after { position: absolute; inset: 3px; border-radius: 50%; background: #1b292b; content: ''; }
 .balance { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 5px; }
-.balance strong { overflow: hidden; color: #82b8b0; font-size: 9px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.balance strong { overflow: hidden; color: #9ad1c7; font-family: 'JetBrains Mono Variable', monospace; font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .more { display: none; }
 .quotaWarning .providerName i { background: #efc57d; }
 .quotaWarning .providerName small { color: #efc57d; }
@@ -258,7 +260,7 @@
   align-items: center;
   gap: 5px;
   overflow: hidden;
-  padding: 1px 4px;
+  padding: 0 4px;
   border: 0;
   background: transparent;
   color: #d7e2d3;
@@ -271,8 +273,8 @@
 .symbol svg { display: block; width: 16px; height: 16px; fill: currentColor; }
 .symbol .pixelCutout { fill: #1b292b; }
 .sessionCopy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
-.sessionName { display: block; min-width: 0; overflow: hidden; color: #d7e2d3; font-size: 9px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
-.sessionMeta { display: flex; min-width: 0; align-items: center; gap: 4px; font-size: 8px; line-height: 1.1; }
+.sessionName { display: block; min-width: 0; overflow: hidden; color: #e4ecdd; font-size: 9px; font-weight: 400; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.sessionMeta { display: flex; min-width: 0; align-items: center; gap: 4px; font-size: 8px; line-height: 1; }
 .project { min-width: 0; flex: 1 1 auto; overflow: hidden; color: #81998c; text-overflow: ellipsis; white-space: nowrap; }
 .badge { flex: 0 0 auto; overflow: hidden; color: #96aa9a; text-overflow: ellipsis; white-space: nowrap; }
 .active { border-color: #47644c !important; }
