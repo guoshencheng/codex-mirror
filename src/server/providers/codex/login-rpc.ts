@@ -56,7 +56,7 @@ export async function startCodexDeviceLogin(
     let message: Record<string, unknown>;
     try { message = JSON.parse(line) as Record<string, unknown>; }
     catch { stop(new Error('INVALID_PROTOCOL')); return; }
-    if (!message || message.jsonrpc !== '2.0') { stop(new Error('INVALID_PROTOCOL')); return; }
+    if (!message || (message.jsonrpc !== undefined && message.jsonrpc !== '2.0')) { stop(new Error('INVALID_PROTOCOL')); return; }
     if (message.method === 'account/login/completed') {
       const params = message.params as Record<string, unknown> | undefined;
       if (params && typeof params.loginId === 'string') {

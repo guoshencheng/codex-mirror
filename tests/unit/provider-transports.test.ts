@@ -119,13 +119,13 @@ let initialized = false;
 rl.on('line', line => {
   const req = JSON.parse(line);
   if (req.method === 'initialize') {
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: {} }) + '\\n');
+    process.stdout.write(JSON.stringify({ id: req.id, result: {} }) + '\\n');
   } else if (req.method === 'initialized') {
     initialized = true;
   } else if (req.method === 'account/rateLimits/read' && initialized) {
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'account/rateLimits/updated', params: {} }) + '\\n');
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: 77, result: { ignored: true } }) + '\\n');
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { rateLimitsByLimitId: { codex: { primary: null } } } }) + '\\n');
+    process.stdout.write(JSON.stringify({ method: 'account/rateLimits/updated', params: {} }) + '\\n');
+    process.stdout.write(JSON.stringify({ id: 77, result: { ignored: true } }) + '\\n');
+    process.stdout.write(JSON.stringify({ id: req.id, result: { rateLimitsByLimitId: { codex: { primary: null } } } }) + '\\n');
     setImmediate(() => process.exit(0));
   }
 });`;

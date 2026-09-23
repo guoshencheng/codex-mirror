@@ -12,14 +12,14 @@ const readline = require('node:readline');
 const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', line => {
   const req = JSON.parse(line);
-  if (req.method === 'initialize') process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:{}})+'\\n');
+  if (req.method === 'initialize') process.stdout.write(JSON.stringify({id:req.id,result:{}})+'\\n');
   if (req.method === 'account/login/start') {
     if (req.params.type !== 'chatgptDeviceCode') process.exit(9);
-    process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:${response}})+'\\n');
-    setTimeout(() => process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'account/login/completed',params:{loginId:'11111111-1111-4111-8111-111111111111',success:true,error:null}})+'\\n'), 10);
+    process.stdout.write(JSON.stringify({id:req.id,result:${response}})+'\\n');
+    setTimeout(() => process.stdout.write(JSON.stringify({method:'account/login/completed',params:{loginId:'11111111-1111-4111-8111-111111111111',success:true,error:null}})+'\\n'), 10);
   }
-  if (req.method === 'account/read') process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:{account:{type:'chatgpt',email:'secret@example.com'},requiresOpenaiAuth:true}})+'\\n');
-  if (req.method === 'account/rateLimits/read') process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:{rateLimits:{limitId:'codex',primary:{usedPercent:25,windowDurationMins:300}}}})+'\\n');
+  if (req.method === 'account/read') process.stdout.write(JSON.stringify({id:req.id,result:{account:{type:'chatgpt',email:'secret@example.com'},requiresOpenaiAuth:true}})+'\\n');
+  if (req.method === 'account/rateLimits/read') process.stdout.write(JSON.stringify({id:req.id,result:{rateLimits:{limitId:'codex',primary:{usedPercent:25,windowDurationMins:300}}}})+'\\n');
 });`;
   await writeFile(executable, source, { mode: 0o700 });
   return { home, executable };

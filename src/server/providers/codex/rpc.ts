@@ -86,7 +86,7 @@ export class CodexRpc {
           finish(undefined, new ProviderTransportError('SCHEMA_CHANGED'));
           return;
         }
-        if (!message || message.jsonrpc !== '2.0') {
+        if (!message || (message.jsonrpc !== undefined && message.jsonrpc !== '2.0')) {
           finish(undefined, new ProviderTransportError('SCHEMA_CHANGED'));
           return;
         }
