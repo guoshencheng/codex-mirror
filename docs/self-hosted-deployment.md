@@ -1,4 +1,4 @@
-# 自托管部署：codex-status.icerock.top
+# 自托管部署：codex-status.shemu.top
 
 当前运行版本位于 `/opt/codex-status-dashboard/app-release-20260924T033707Z`；此前的 `/opt/codex-status-dashboard/app` 目录保持原样。私有配置位于 `/opt/codex-status-dashboard/private`。数据库、Web/API、Provider Runtime 与独立展示页分开运行。Web/API 仅监听服务器 `127.0.0.1:3100`，展示页仅监听 `127.0.0.1:3101`，数据库只在 Compose 内网开放。
 
@@ -6,20 +6,22 @@
 
 ## 1Panel 站点与证书
 
-在 1Panel 创建 `codex-status.icerock.top` 的 HTTPS 站点并配置证书，然后设置两个反向代理：
+在 1Panel 创建 `codex-status.shemu.top` 的 HTTPS 站点并配置证书，然后设置两个反向代理：
 
 | 公开路径 | 上游 | 要求 |
 | --- | --- | --- |
 | `/display/` | `http://127.0.0.1:3101` | 保留原始路径；包含静态资源请求 |
 | `/` 及其他路径 | `http://127.0.0.1:3100` | 传递原始 Host、协议和请求路径 |
 
-`/display/` 规则必须先于 `/`。如果 1Panel 的代理路径会删掉前缀，请改用保留 `/display/` 的规则；否则展示页资源会返回 404。完成后访问 `https://codex-status.icerock.top/api/health` 和 `https://codex-status.icerock.top/display/`。展示页默认使用这一 HTTPS API origin；管理员也可在 `/settings?tab=display` 配置当前浏览器使用的其他 HTTPS API 地址。跨域来源需加入 Web 的 `DASHBOARD_DISPLAY_ORIGINS` 配置并重启 Web。
+`/display/` 规则必须先于 `/`。如果 1Panel 的代理路径会删掉前缀，请改用保留 `/display/` 的规则；否则展示页资源会返回 404。完成后访问 `https://codex-status.shemu.top/api/health` 和 `https://codex-status.shemu.top/display/`。展示页默认使用这一 HTTPS API origin；管理员也可在 `/settings?tab=display` 配置当前浏览器使用的其他 HTTPS API 地址。跨域来源需加入 Web 的 `DASHBOARD_DISPLAY_ORIGINS` 配置并重启 Web。
+
+登录和 CSRF 校验严格匹配服务器私有 `private/.env` 中的 `APP_ORIGIN`。域名变更后，必须将它更新为新的精确 HTTPS origin `https://codex-status.shemu.top` 并重建 Web 容器；该值不能带路径，也不支持通配符或自动信任请求 Host。1Panel 应传递原始 Host 和协议。`COLLECTOR_PUBLIC_ORIGIN` 未配置时会使用 `APP_ORIGIN` 生成采集器安装链接。
 
 ## 管理和 Token
 
 服务器私有文件 `private/user-token` 存放唯一全局用户 Token，文件权限为 0640，属组为容器中的 `node` 用户（GID 1000）。新生成的 Token 为 8 位易辨认的小写字母和数字。登录管理页面或连接独立展示页时使用同一 Token；持有它的人同时拥有管理权限。不要将其写入 1Panel 公共环境、前端构建配置或代码仓库。旧版 `cdu_` 加 43 位 base64url Token 在仍写入该文件时继续兼容；替换为新 Token 后，旧 Token 和旧管理会话都会失效。轮换时保持原有文件属组和权限。
 
-Kindle 等不方便输入 Token 的设备，可直接打开 `https://codex-status.icerock.top/display/#token=<用户 Token>`。展示页会自动连接，并立即清除地址栏中的 Token；`#` 后的内容不会随 HTTP 请求发送。该链接本身仍包含管理 Token，请只在自己的设备中使用。Token 保存在当前浏览器会话中，关闭会话后可再次打开该链接。
+Kindle 等不方便输入 Token 的设备，可直接打开 `https://codex-status.shemu.top/display/#token=<用户 Token>`。展示页会自动连接，并立即清除地址栏中的 Token；`#` 后的内容不会随 HTTP 请求发送。该链接本身仍包含管理 Token，请只在自己的设备中使用。Token 保存在当前浏览器会话中，关闭会话后可再次打开该链接。
 
 首页与独立展示页使用同一套像素面板样式。首页只显示状态和详情，右上角入口进入 `/settings`；账号、设备及展示连接都在设置页管理。独立展示页没有设置表单，首次访问需使用带 Token 的链接，或先在同一浏览器的设置页保存连接信息。
 
