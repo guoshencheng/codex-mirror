@@ -1,4 +1,5 @@
 import type { DashboardDevice, DashboardSession } from '../contracts/dashboard';
+import { harnessLabel } from './pixel-dashboard-model';
 
 const sessionStateLabel: Record<DashboardSession['state'], string> = {
   IDLE: '待命',
@@ -48,7 +49,7 @@ export default function SessionList({ sessions, devices }: SessionListProps) {
           </span>
         </header>
         <p className="ds-meta">
-          {session.projectName ?? '未归属项目'} · {device?.name ?? '未知设备'}
+          {harnessLabel(session)} · {session.projectName ?? '未归属项目'} · {device?.name ?? '未知设备'}
         </p>
         <p>{prefix}：{sessionStateLabel[session.state]}</p>
         <p className="ds-meta">状态可信度：{confidence}</p>

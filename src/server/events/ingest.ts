@@ -120,13 +120,17 @@ async function applyContiguous(client: PoolClient, deviceId: string, epoch: stri
         ON CONFLICT(project_key) DO UPDATE SET name = COALESCE(EXCLUDED.name, projects.name), updated_at = now()`,
       [projectKey, event.metadata.projectName ?? null]);
     }
-    await client.query(`INSERT INTO sessions(device_id, session_id, generation, state, project_key, title)
-      VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+    const harness = event.harness ?? (event.sessionId.startsWith('kimi:') ? 'kimi' : 'codex');
+    await client.query(`INSERT INTO sessions(device_id, session_id, generation, state, project_key, title, harness, client_type)
+      VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
       ON CONFLICT(device_id, session_id) DO UPDATE SET generation = EXCLUDED.generation, state = EXCLUDED.state,
         project_key = CASE WHEN sessions.generation = EXCLUDED.generation THEN COALESCE(EXCLUDED.project_key, sessions.project_key) ELSE EXCLUDED.project_key END,
         title = CASE WHEN sessions.generation = EXCLUDED.generation THEN COALESCE(EXCLUDED.title, sessions.title) ELSE EXCLUDED.title END,
+        harness = CASE WHEN sessions.generation = EXCLUDED.generation THEN COALESCE(EXCLUDED.harness, sessions.harness) ELSE EXCLUDED.harness END,
+        client_type = CASE WHEN sessions.generation = EXCLUDED.generation THEN COALESCE(EXCLUDED.client_type, sessions.client_type) ELSE EXCLUDED.client_type END,
         updated_at = now()`,
-    [deviceId, event.sessionId, generation, JSON.stringify(reduced), projectKey, event.metadata.title ?? null]);
+    [deviceId, event.sessionId, generation, JSON.stringify(reduced), projectKey, event.metadata.title ?? null,
+      harness, event.clientType ?? null]);
     await client.query('UPDATE agent_events SET applied = true WHERE device_id = $1 AND epoch = $2 AND sequence = $3', [deviceId, epoch, event.sequence]);
     sequence++;
   }

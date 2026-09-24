@@ -28,6 +28,12 @@ The one-time Dashboard command supplies its own server URL. The server can set `
 
 Open Codex and review/trust the new Hooks in `/hooks`. This trust step is not bypassed by the installer. Existing sessions are not backfilled.
 
+### Kimi Code CLI 和桌面端
+
+在同一设备安装包含 Kimi 适配的采集端后，运行 `bash public/install-kimi.sh`；从当前自托管站点运行可用 `curl -fsSL https://codex-status.shemu.top/install-kimi.sh | bash`。脚本调用最新已安装采集器的 `install-kimi` 命令，在 `~/.kimi-code/config.toml` 末尾加入受标记管理的 `[[hooks]]`，并备份原配置；重复运行不会叠加规则。可用 `bash public/install-kimi.sh --dry-run` 预览合并后的配置。Kimi Code Desktop 与 CLI 共用这份 Hook 配置，新会话会加载变更。远端安装时也可指定 `COLLECTOR_CLI=/path/to/cli.js` 和 `COLLECTOR_CONFIG=/path/to/config.json`。
+
+Kimi 会话在采集队列中使用 `kimi:` 前缀，与 Codex 会话隔离。采集器只保留事件、Harness、客户端类型、工具名、项目标识和 Kimi 提供的会话标题，不保存提示词或工具参数。Kimi 的 `TurnStarted` 对应工作中状态，`Stop` 对应轮次结束。看板的会话列表和详情会显示来源；旧事件的客户端类型可能未知。部署新版服务端时，先运行数据库迁移，再升级采集端以发送来源字段。
+
 Rerun the generated command within its 15-minute validity window for the initial setup. Existing device configuration and the SQLite queue are preserved; old release directories are kept for recovery. Linux needs a running systemd user session; `loginctl enable-linger "$USER"` is needed if it must run after logout. To install without registering a service, append `-s -- --no-service` to the generated command's `bash` invocation, or use the generic installer with its hidden Token prompt.
 
 If registration succeeds but the first heartbeat fails before `config.json` is written, rerun an install command. The private `.registration-id` file lets the server return the same device credentials, and the existing SQLite queue must match that device ID. A fresh one-time link works if the first link has expired; do not delete the queue or registration key. Other partial installations without a matching retry key remain blocked for inspection.

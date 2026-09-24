@@ -9,7 +9,7 @@ describe('Codex hook normalization', () => {
       prompt: 'SECRET_PROMPT', tool_output: 'SECRET_OUTPUT',
     }, () => new Date('2026-09-22T00:00:00Z'));
     expect(hook).toEqual({
-      schemaVersion: 1, sessionId: 'codex-session', turnId: 'turn-1', type: 'tool.finished',
+      schemaVersion: 1, sessionId: 'codex-session', harness: 'codex', turnId: 'turn-1', type: 'tool.finished',
       occurredAt: '2026-09-22T00:00:00.000Z', metadata: {},
     });
     expect(JSON.stringify(hook)).not.toMatch(/SECRET_|private|alice/);

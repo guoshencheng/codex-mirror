@@ -6,6 +6,10 @@ export const eventTypes = [
 ] as const;
 
 export type EventType = typeof eventTypes[number];
+export const harnesses = ['codex', 'kimi'] as const;
+export const clientTypes = ['cli', 'desktop'] as const;
+export type Harness = typeof harnesses[number];
+export type ClientType = typeof clientTypes[number];
 
 const metadataSchema = z.object({
   projectKey: z.string().min(1).max(160).optional(),
@@ -21,6 +25,9 @@ export const agentEventSchema = z.object({
   collectorEpoch: z.string().min(1).max(128),
   sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   sessionId: z.string().min(1).max(128),
+  // Optional while older collectors and queued events are still in use.
+  harness: z.enum(harnesses).optional(),
+  clientType: z.enum(clientTypes).optional(),
   turnId: z.string().min(1).max(128).nullable(),
   type: z.enum(eventTypes),
   occurredAt: z.string().datetime({ offset: true }),

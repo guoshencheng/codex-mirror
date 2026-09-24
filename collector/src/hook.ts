@@ -39,9 +39,37 @@ export function normalizeHook(raw: unknown, now: () => Date = () => new Date()):
   return {
     schemaVersion: 1,
     sessionId,
+    harness: 'codex',
+    ...(raw.client_type === 'codex_cli' ? { clientType: 'cli' as const }
+      : raw.client_type === 'codex_desktop' || raw.client_type === 'codex_app' ? { clientType: 'desktop' as const } : {}),
     turnId: type === 'session.started' || type === 'session.ended' ? null : turnId,
     type,
     occurredAt,
     metadata: toolName && ['tool.started', 'approval.requested'].includes(type) ? { toolName } : {},
+  };
+}
+
+/** Keep Kimi session IDs separate from Codex IDs in the shared device queue. */
+export function normalizeKimiHook(raw: unknown, now: () => Date = () => new Date()): EventWithoutIds | null {
+  if (!isRecord(raw)) return null;
+  const kimiEvents: Readonly<Record<string, string>> = {
+    SessionStart: 'SessionStart', TurnStarted: 'UserPromptSubmit',
+    PreToolUse: 'PreToolUse', PostToolUse: 'PostToolUse',
+    PermissionRequest: 'PermissionRequest', Stop: 'Stop',
+    Interrupt: 'Interrupt', SessionEnd: 'SessionEnd',
+  };
+  const name = typeof raw.hook_event_name === 'string' ? kimiEvents[raw.hook_event_name] : undefined;
+  const sessionId = boundedText(raw.session_id, 123);
+  if (!name || !sessionId) return null;
+  const normalized = normalizeHook({ ...raw, hook_event_name: name, session_id: `kimi:${sessionId}` }, now);
+  if (!normalized) return null;
+  const title = boundedText(raw.session_title, 160)?.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  const clientType = raw.client_type === 'kimi_code_cli' ? 'cli'
+    : raw.client_type === 'kimi_code_desktop' || raw.client_type === 'kimi_code_app' ? 'desktop' : undefined;
+  return {
+    ...normalized,
+    harness: 'kimi',
+    ...(clientType ? { clientType } : {}),
+    metadata: title ? { ...normalized.metadata, title } : normalized.metadata,
   };
 }

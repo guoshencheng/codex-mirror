@@ -23,7 +23,7 @@ async function withEventsDb<T>(run: (pool: Pool) => Promise<T>): Promise<T> {
   try { await setup.query(`CREATE SCHEMA ${schema}`); } finally { setup.release(); }
   const pool = new Pool({ connectionString: connectionString(), max: 4, options: `-c search_path=${schema}` });
   try {
-    for (const file of ['001-quota.sql', '002-events.sql']) {
+    for (const file of ['001-quota.sql', '002-events.sql', '009-session-harness.sql']) {
       await pool.query(await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8'));
     }
     await pool.query(`INSERT INTO devices(id, name, token_hash) VALUES ('d1', 'Laptop', $1)`, [createHash('sha256').update(testToken).digest('hex')]);

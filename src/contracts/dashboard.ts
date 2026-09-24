@@ -1,4 +1,4 @@
-import type { SessionState } from './events';
+import type { ClientType, Harness, SessionState } from './events';
 import type { ProviderFailureCode, ProviderSnapshot } from './quota';
 
 export type DeviceConnection = 'online' | 'stale' | 'offline';
@@ -18,6 +18,8 @@ export interface DashboardSession {
   projectId: string | null;
   projectName: string | null;
   title: string;
+  harness: Harness | null;
+  clientType: ClientType | null;
   state: SessionState['state'];
   confidence: SessionState['confidence'];
   lastEventAt: string;

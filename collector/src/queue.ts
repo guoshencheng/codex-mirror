@@ -164,7 +164,8 @@ export function openQueue(path: string, maxBytes = 100_000_000, deviceId = proce
     let event: AgentEvent | null = null;
     if (clean && clean !== tracked.title) {
       event = appendTransaction({
-        schemaVersion: 1, sessionId, turnId: null, type: 'session.metadata.updated',
+        schemaVersion: 1, sessionId, harness: sessionId.startsWith('kimi:') ? 'kimi' : 'codex',
+        turnId: null, type: 'session.metadata.updated',
         occurredAt: checkedAt, metadata: { title: clean },
       });
       database.prepare('UPDATE session_tracking SET title = ? WHERE session_id = ?').run(clean, sessionId);

@@ -52,7 +52,7 @@ async function readDevices(client: PoolClient, now: Date): Promise<DashboardDevi
 
 async function readSessions(client: PoolClient, now: Date): Promise<DashboardSession[]> {
   const result = await client.query(`SELECT s.session_id, s.device_id, s.project_key, p.name AS project_name,
-      s.title, s.state, started.occurred_at AS turn_started_at, d.last_heartbeat_at,
+      s.title, s.harness, s.client_type, s.state, started.occurred_at AS turn_started_at, d.last_heartbeat_at,
       COALESCE(ds.incomplete, false) AS stream_incomplete
     FROM sessions s
     JOIN devices d ON d.id = s.device_id AND d.revoked_at IS NULL
@@ -69,7 +69,8 @@ async function readSessions(client: PoolClient, now: Date): Promise<DashboardSes
   return result.rows.map(raw => {
     const row = raw as {
       session_id: string; device_id: string; project_key: string | null; project_name: string | null;
-      title: string | null; state: SessionState; turn_started_at: Date | string | null;
+      title: string | null; harness: DashboardSession['harness']; client_type: DashboardSession['clientType'];
+      state: SessionState; turn_started_at: Date | string | null;
       last_heartbeat_at: Date | string | null; stream_incomplete: boolean;
     };
     const freshness = deriveFreshness({
@@ -84,6 +85,8 @@ async function readSessions(client: PoolClient, now: Date): Promise<DashboardSes
       projectId: row.project_key,
       projectName: row.project_name,
       title: row.title ?? `会话 ${row.session_id.slice(0, 8)}`,
+      harness: row.harness,
+      clientType: row.client_type,
       state: row.state.state,
       confidence: freshness.confidence,
       lastEventAt: row.state.lastEventAt,

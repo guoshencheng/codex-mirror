@@ -31,7 +31,7 @@ async function withDashboardDb<T>(run: (pool: Pool) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString, max: 10, options: `-c search_path=${schema}` });
   process.env.APP_ORIGIN = appOrigin;
   try {
-    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql', '007-configured-user-token.sql']) {
+    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql', '007-configured-user-token.sql', '009-session-harness.sql']) {
       await pool.query(await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8'));
     }
     return await run(pool);

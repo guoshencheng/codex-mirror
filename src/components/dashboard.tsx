@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { DashboardDto } from '../contracts/dashboard';
 import QuotaCard from './quota-card';
 import PixelQuotaRow from './pixel-quota-row';
-import { ageText, durationText, isCurrentSession, sessionLabels } from './pixel-dashboard-model';
+import { ageText, durationText, harnessLabel, isCurrentSession, sessionLabels } from './pixel-dashboard-model';
 import { useDashboardPolling } from './use-dashboard-polling';
 import styles from './pixel-dashboard.module.css';
 
@@ -112,6 +112,7 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
               <p>{isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? '当前状态' : '最近状态'}：{sessionLabels[selectedSession.state]}</p>
               {!isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? <p className={styles.warning}>当前执行情况未知，请检查设备连接与状态同步。</p> : null}
               <dl><dt>项目</dt><dd>{selectedSession.projectName ?? '未归属项目'}</dd>
+                <dt>Harness</dt><dd>{harnessLabel(selectedSession)}</dd>
                 <dt>设备</dt><dd>{selectedDevice?.name ?? '未知设备'}</dd>
                 <dt>状态可信度</dt><dd>{selectedSession.confidence === 'confirmed' ? '已确认' : '未确认'}</dd>
                 {selectedSession.currentTool ? <><dt>当前工具</dt><dd>{selectedSession.currentTool}</dd></> : null}
@@ -157,10 +158,10 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
                 const label = `${currentState ? '' : '最近：'}${sessionLabels[session.state]}`;
                 return <li key={`${session.deviceId}:${session.id}`} className={currentState && session.state === 'WAITING_APPROVAL' ? styles.attention : ''}>
                   <h3><button className={styles.sessionRow} onClick={event => open({ kind: 'session', id: session.id, deviceId: session.deviceId }, event.currentTarget)}
-                    title={`${session.title} · ${session.projectName ?? '未归属项目'} · ${device?.name ?? '未知设备'} · ${label}`}>
+                    title={`${session.title} · ${harnessLabel(session)} · ${session.projectName ?? '未归属项目'} · ${device?.name ?? '未知设备'} · ${label}`}>
                     <span className={styles.symbol} aria-hidden="true">{!currentState ? '?' : session.state === 'WAITING_APPROVAL' ? '!' : session.state === 'WORKING' ? '›' : '·'}</span>
                     <span className={styles.sessionName}>{session.title}</span>
-                    <span className={styles.project}>{device?.name ?? '未知设备'}</span>
+                    <span className={styles.project}>{harnessLabel(session)} · {device?.name ?? '未知设备'}</span>
                     <span className={styles.badge}>{label}</span>
                   </button></h3>
                 </li>;

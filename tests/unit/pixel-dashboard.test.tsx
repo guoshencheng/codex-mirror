@@ -17,7 +17,7 @@ function account(id: string): DashboardAccount {
       metrics: [{ kind: 'quota-window', key: '5h', label: '5H', usedPercent: 28, windowDurationSeconds: 18000, resetsAt: null }] } };
 }
 function session(id: string, state: DashboardSession['state'] = 'WORKING'): DashboardSession {
-  return { id, deviceId: 'device', title: `Task ${id}`, state, confidence: 'confirmed', projectId: 'project', projectName: 'Project',
+  return { id, deviceId: 'device', title: `Task ${id}`, harness: 'codex', clientType: null, state, confidence: 'confirmed', projectId: 'project', projectName: 'Project',
     lastEventAt: time, lastReceivedAt: time, turnStartedAt: time, currentTool: null };
 }
 function data(): DashboardDto {

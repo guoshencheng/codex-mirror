@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { defaultConfigPath, loadCollectorConfig } from './config';
 import { createCollectorClient } from './client';
-import { normalizeHook } from './hook';
+import { normalizeHook, normalizeKimiHook } from './hook';
 import { defaultHooksConfigPath, installHooks, uninstallHooks } from './install';
+import { defaultKimiConfigPath, installKimiHooks } from './install-kimi';
 import { resolveProject } from './project';
 import { openQueue } from './queue';
 import { runCollectorLoop } from './heartbeat';
@@ -36,8 +37,8 @@ function hookName(value: unknown): string | null {
   return typeof event === 'string' ? event : null;
 }
 
-async function runHook(eventArgument?: string): Promise<void> {
-  const stopEvent = eventArgument === 'Stop';
+async function runHook(eventArgument?: string, source: 'codex' | 'kimi' = 'codex'): Promise<void> {
+  const stopEvent = source === 'codex' && eventArgument === 'Stop';
   let queue: ReturnType<typeof openQueue> | null = null;
   try {
     const input = await readHookInput();
@@ -45,7 +46,7 @@ async function runHook(eventArgument?: string): Promise<void> {
       process.stderr.write('codex-status-dashboard: invalid hook input\n');
       return;
     }
-    const event = normalizeHook(input.value);
+    const event = source === 'kimi' ? normalizeKimiHook(input.value) : normalizeHook(input.value);
     if (!event) return;
     const config = loadCollectorConfig();
     queue = openQueue(config.queuePath, 100_000_000, config.deviceId);
@@ -53,6 +54,9 @@ async function runHook(eventArgument?: string): Promise<void> {
     const project = event.type === 'tool.finished' ? null : resolveProject(raw.cwd, config.deviceId, queue);
     const metadata = { ...event.metadata, ...(project ?? {}) };
     queue.appendHook({ ...event, metadata });
+    if (source === 'kimi' && typeof event.metadata.title === 'string') {
+      queue.recordTitleCheck(event.sessionId, event.metadata.title, event.occurredAt);
+    }
   } catch {
     // Keep hook failures out of model context and never make tracking control Codex.
     process.stderr.write('codex-status-dashboard: event capture failed\n');
@@ -78,7 +82,7 @@ async function runDaemon(): Promise<void> {
       upload: client.upload,
       refreshMetadata: async () => {
         const now = new Date().toISOString();
-        const candidates = queue.titleCandidates(now, 10);
+        const candidates = queue.titleCandidates(now, 10).filter(sessionId => !sessionId.startsWith('kimi:'));
         if (candidates.length === 0) return;
         const titles = await readThreadTitles(candidates, { signal: controller.signal });
         for (const [sessionId, title] of titles) queue.recordTitleCheck(sessionId, title, new Date().toISOString());
@@ -100,7 +104,16 @@ function codexHome(): string {
 async function main(argv = process.argv.slice(2)): Promise<void> {
   const [command, option] = argv;
   if (command === 'hook') return runHook(option);
+  if (command === 'hook-kimi') return runHook(option, 'kimi');
   if (command === 'run') return runDaemon();
+  if (command === 'install-kimi') {
+    const result = await installKimiHooks(defaultKimiConfigPath(process.env.HOME ?? ''), {
+      nodePath: process.execPath, cliPath: process.argv[1], dryRun: argv.includes('--dry-run'),
+    });
+    if (argv.includes('--dry-run')) process.stdout.write(result.toml);
+    else process.stdout.write(result.changed ? 'Kimi Code hooks installed. Start a new Kimi session to activate them.\n' : 'Kimi Code hooks already installed.\n');
+    return;
+  }
   if (command === 'install') {
     const result = await installHooks(defaultHooksConfigPath(codexHome()), { dryRun: argv.includes('--dry-run') });
     if (argv.includes('--dry-run')) process.stdout.write(result.json);
@@ -113,7 +126,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     else process.stdout.write(result.changed ? 'Managed hooks removed.\n' : 'No managed hooks found.\n');
     return;
   }
-  process.stderr.write(`Usage: collector <hook EventName|run|install [--dry-run]|uninstall [--dry-run]>\nConfig: ${defaultConfigPath()}\n`);
+  process.stderr.write(`Usage: collector <hook EventName|hook-kimi EventName|run|install [--dry-run]|install-kimi [--dry-run]|uninstall [--dry-run]>\nConfig: ${defaultConfigPath()}\n`);
   process.exitCode = 2;
 }
 

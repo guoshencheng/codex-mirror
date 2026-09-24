@@ -35,17 +35,17 @@ const devices: DashboardDevice[] = [
 
 const sessions: DashboardSession[] = [
   {
-    id: 'working', deviceId: 'device-2', projectId: null, projectName: null,
+    id: 'working', deviceId: 'device-2', projectId: null, projectName: null, harness: 'kimi', clientType: 'cli',
     title: '<img src=x onerror=alert(1)> Working task', state: 'WORKING', confidence: 'unconfirmed',
     lastEventAt: '2026-09-22T10:00:00.000Z', lastReceivedAt: '2026-09-22T10:00:01.000Z', turnStartedAt: null, currentTool: null,
   },
   {
-    id: 'approval', deviceId: 'device-1', projectId: 'project-1', projectName: 'Dashboard',
+    id: 'approval', deviceId: 'device-1', projectId: 'project-1', projectName: 'Dashboard', harness: 'codex', clientType: null,
     title: 'Approval needed', state: 'WAITING_APPROVAL', confidence: 'confirmed',
     lastEventAt: '2026-09-22T10:01:00.000Z', lastReceivedAt: '2026-09-22T10:01:01.000Z', turnStartedAt: null, currentTool: 'terminal',
   },
   {
-    id: 'stopped', deviceId: 'device-1', projectId: null, projectName: null,
+    id: 'stopped', deviceId: 'device-1', projectId: null, projectName: null, harness: null, clientType: null,
     title: 'Stopped task', state: 'STOPPED', confidence: 'confirmed',
     lastEventAt: '2026-09-22T09:58:00.000Z', lastReceivedAt: '2026-09-22T09:58:01.000Z', turnStartedAt: null, currentTool: null,
   },

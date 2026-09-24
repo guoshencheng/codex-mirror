@@ -5,6 +5,14 @@ export const sessionLabels: Record<DashboardSession['state'], string> = {
   INTERRUPTED: '已中断', ENDED: '已结束', UNKNOWN: '状态未知',
 };
 
+export function harnessLabel(session: Pick<DashboardSession, 'harness' | 'clientType'>): string {
+  if (session.harness === 'kimi') return session.clientType === 'cli' ? 'Kimi CLI'
+    : session.clientType === 'desktop' ? 'Kimi 桌面端' : 'Kimi Code';
+  if (session.harness === 'codex') return session.clientType === 'cli' ? 'Codex CLI'
+    : session.clientType === 'desktop' ? 'Codex Desktop' : 'Codex';
+  return '来源未知';
+}
+
 export function isCurrentSession(session: DashboardSession, device: DashboardDevice | undefined, syncHealthy: boolean): boolean {
   return syncHealthy && session.confidence === 'confirmed' && device?.connection === 'online' && !device.streamIncomplete;
 }
