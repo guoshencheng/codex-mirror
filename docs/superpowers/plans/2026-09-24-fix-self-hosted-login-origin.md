@@ -33,8 +33,8 @@
 - Modify: `docs/self-hosted-deployment.md`
 - Create: `docs/superpowers/plans/2026-09-24-fix-self-hosted-login-origin.md`
 
-- [ ] 把该部署文档中的公开域名和访问示例更新为 `codex-status.shemu.top`。
-- [ ] 检查本计划与现存认证行为、部署方式一致。
+- [x] 把该部署文档中的公开域名和访问示例更新为 `codex-status.shemu.top`。
+- [x] 检查本计划与现存认证行为、部署方式一致。
 
 ### Task 2：更新生产来源并重建 Web
 
@@ -42,9 +42,9 @@
 - Runtime config: `/opt/codex-status-dashboard/private/.env`（服务器私有文件，不入库）
 - Compose: `/opt/codex-status-dashboard/current/deploy/compose.self-hosted.yaml`
 
-- [ ] 备份私有 `.env`，仅将 `APP_ORIGIN` 更新为 `https://codex-status.shemu.top`，保留权限及其他值。
-- [ ] 用现有 Compose 配置重建 Web 容器。
-- [ ] 确认 Web 容器拿到新 `APP_ORIGIN`，并通过新域名的 HTTPS 健康检查。
+- [x] 备份私有 `.env`，仅将 `APP_ORIGIN` 更新为 `https://codex-status.shemu.top`，保留权限及其他值。
+- [x] 用现有 Compose 配置重建 Web 容器。
+- [x] 确认 Web 容器拿到新 `APP_ORIGIN`，并通过新域名的 HTTPS 健康检查。
 
 ### Task 3：提交并推送
 
@@ -52,4 +52,4 @@
 - Commit: `docs/self-hosted-deployment.md`
 - Commit: `docs/superpowers/plans/2026-09-24-fix-self-hosted-login-origin.md`
 
-- [ ] 提交中文部署文档和本计划，并推送当前分支。
+- [x] 提交中文部署文档和本计划，并推送当前分支。
