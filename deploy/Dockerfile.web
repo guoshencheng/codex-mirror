@@ -1,10 +1,11 @@
 FROM node:24-bookworm-slim AS build
+ARG NPM_REGISTRY=https://registry.npmjs.org
 RUN sed -i 's@http://deb.debian.org@https://mirrors.cloud.tencent.com@g' /etc/apt/sources.list.d/debian.sources \
   && apt-get -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false update \
   && apt-get -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false install -y --no-install-recommends python3 make g++ ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+RUN npm ci --include=dev --registry="$NPM_REGISTRY"
 COPY . .
 RUN npm run build
 

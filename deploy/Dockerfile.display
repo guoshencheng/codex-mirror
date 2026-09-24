@@ -1,7 +1,8 @@
 FROM node:24-bookworm-slim AS build
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev --ignore-scripts
+RUN npm ci --include=dev --ignore-scripts --registry="$NPM_REGISTRY"
 COPY display ./display
 COPY src/contracts ./src/contracts
 COPY src/components ./src/components

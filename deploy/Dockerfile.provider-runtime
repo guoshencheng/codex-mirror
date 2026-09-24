@@ -1,4 +1,5 @@
 FROM node:24-bookworm-slim AS dependencies
+ARG NPM_REGISTRY=https://registry.npmjs.org
 
 RUN sed -i 's@http://deb.debian.org@https://mirrors.cloud.tencent.com@g' /etc/apt/sources.list.d/debian.sources \
   && apt-get -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false update \
@@ -7,10 +8,11 @@ RUN sed -i 's@http://deb.debian.org@https://mirrors.cloud.tencent.com@g' /etc/ap
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+RUN npm ci --include=dev --registry="$NPM_REGISTRY"
 
 FROM node:24-bookworm-slim AS runtime
 
+ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG CODEX_CLI_VERSION=0.146.0
 ARG KIMI_CODE_VERSION=2.0.2
 ENV NODE_ENV=production \
@@ -30,7 +32,7 @@ RUN sed -i 's@http://deb.debian.org@https://mirrors.cloud.tencent.com@g' /etc/ap
   && chown -R node:node /app /var/lib/dashboard-auth
 
 WORKDIR /app
-RUN npm install --global --omit=dev \
+RUN npm install --global --omit=dev --registry="$NPM_REGISTRY" \
   "@openai/codex@${CODEX_CLI_VERSION}" \
   "@moonshot-ai/kimi-code@${KIMI_CODE_VERSION}" \
   && printf '#!/bin/sh\nexport KIMI_CODE_NO_AUTO_UPDATE=1\nexec /usr/local/bin/kimi "$@"\n' > /usr/local/bin/kimi-runtime \
@@ -38,7 +40,7 @@ RUN npm install --global --omit=dev \
   && npm cache clean --force
 
 # npm can omit the aliased optional platform package from a global install.
-RUN npm install --global --omit=dev "@openai/codex-linux-x64@npm:@openai/codex@${CODEX_CLI_VERSION}-linux-x64" \
+RUN npm install --global --omit=dev --registry="$NPM_REGISTRY" "@openai/codex-linux-x64@npm:@openai/codex@${CODEX_CLI_VERSION}-linux-x64" \
   && npm cache clean --force
 
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules

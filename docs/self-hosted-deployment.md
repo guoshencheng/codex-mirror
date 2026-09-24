@@ -51,4 +51,6 @@ curl -fsS http://127.0.0.1:3101/display/ >/dev/null
 
 更新源码后，从新 release 目录执行 `docker compose --env-file /opt/codex-status-dashboard/private/.env -f deploy/compose.self-hosted.yaml up -d --build`；迁移服务先运行，再启动 Web 和 worker。Token 和数据库密码不会随源码更新覆盖。
 
+若服务器到 npm 官方源的连接不稳定，构建时可传 `docker compose ... build --build-arg NPM_REGISTRY=https://registry.npmmirror.com web worker display`。该参数只影响镜像构建时的依赖下载，不写入运行时配置或发布源码。
+
 备份至少包含 PostgreSQL `database` 卷或一致性 `pg_dump`、`private/` 目录和 `runtime-auth` 卷；把加密备份存到服务器之外。公开 HTTPS 的最终验收需在 1Panel 站点和证书完成后进行。
