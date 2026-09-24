@@ -131,7 +131,7 @@ npm run admin:create -- --output=/private/path/dashboard-user-token.txt
 npm run device:create -- 'MacBook Pro'
 ```
 
-`admin:create` 生成随机用户 Token 并保存到指定的 0600 文件；登录页仅输入此 Token。轮换使用同一命令加 `--rotate` 和新的输出路径，旧 Token 及已有会话立即失效。数据库沿用原凭据哈希字段保存 scrypt 哈希，不保存明文 Token；`device:create` 只显示一次设备 token。将 token 安全配置到每台采集端，不要粘贴到截图、聊天或日志。worker 日志不显示上游响应正文和凭据；Compose 也限制日志轮替。可用以下命令查看服务是否运行：
+`admin:create` 生成 8 位随机用户 Token 并保存到指定的 0600 文件；登录页仅输入此 Token。轮换时将新 Token 放入私有配置并重启服务；旧管理会话立即失效，数据库中的账号、设备、额度与事件数据不受影响。数据库沿用原凭据哈希字段保存 scrypt 哈希，不保存明文 Token；`device:create` 只显示一次设备 token。将 token 安全配置到每台采集端，不要粘贴到截图、聊天或日志。worker 日志不显示上游响应正文和凭据；Compose 也限制日志轮替。可用以下命令查看服务是否运行：
 
 ```sh
 docker compose --env-file .env -f deploy/compose.provider-runtime.yaml ps

@@ -11,6 +11,19 @@ const event = (sequence: number, type: EventType, turnId: string | null = 't1', 
 });
 
 describe('session state reducer', () => {
+  it('applies title metadata without changing execution state or activity time', () => {
+    const working = reduceSession(null, event(1, 'turn.started'), received);
+    const metadata = reduceSession(working, event(2, 'session.metadata.updated', null, { title: 'New title' }), '2026-09-22T00:05:00Z');
+    expect(metadata).toMatchObject({ state: 'WORKING', lastSequence: 2, lastEventAt: at, lastReceivedAt: received });
+  });
+
+  it('resumes work after approval without exposing a tool name', () => {
+    const started = reduceSession(null, event(1, 'turn.started'), received);
+    const waiting = reduceSession(started, event(2, 'approval.requested'), received);
+    const resumed = reduceSession(waiting, event(3, 'turn.resumed'), received);
+    expect(resumed).toMatchObject({ state: 'WORKING', currentTool: null });
+  });
+
   it('does not let a delayed old-turn Stop end the current turn', () => {
     const first = reduceSession(null, event(1, 'turn.started'), received);
     const next = reduceSession(first, event(2, 'turn.started', 't2'), received);

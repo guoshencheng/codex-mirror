@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import { authenticateDevice, consumeDeviceRateLimit } from '../../src/server/events/device-auth';
 import { createDevice, revokeDevice } from '../../src/server/events/devices';
+import { createAgentHandlers } from '../../src/server/events/handlers';
 
 function connectionString(): string {
   const value = process.env.TEST_DATABASE_URL ?? 'postgresql:///codex_status_dashboard_test';
@@ -32,6 +33,23 @@ async function withAuthDb<T>(run: (pool: Pool) => Promise<T>): Promise<T> {
 }
 
 describe('device bearer authentication', () => {
+  it('returns the authenticated device ID for migration preflight without changing heartbeat state', async () => {
+    await withAuthDb(async pool => {
+      const created = await createDevice('Mac mini', pool);
+      const request = new Request('https://dashboard.example/api/agent/identity', {
+        headers: { authorization: `Bearer ${created.token}` },
+      });
+      const response = await createAgentHandlers(pool).identity(request);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ deviceId: created.id });
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const unknown = await createAgentHandlers(pool).identity(new Request(request.url, {
+        headers: { authorization: `Bearer ${'x'.repeat(43)}` },
+      }));
+      expect(unknown.status).toBe(401);
+      expect(await unknown.json()).toEqual({ error: 'UNAUTHORIZED' });
+    });
+  });
   it('creates a high-entropy one-time token and authenticates only its bearer', async () => {
     await withAuthDb(async pool => {
       const created = await createDevice('Mac mini', pool);

@@ -32,11 +32,20 @@ describe('collector HTTP client', () => {
   it('sends only collector heartbeat metadata without process or prompt data', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const client = createCollectorClient(config, fetcher);
-    await client.heartbeat({ epoch: 'epoch-a', bootId: 'boot-a', queuedThrough: 1, queueDepth: 1, eventLoss: false });
+    await client.heartbeat({ epoch: 'epoch-a', bootId: 'boot-a', queuedThrough: 1, firstPendingSequence: 1, queueDepth: 1, eventLoss: false });
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, init] = fetcher.mock.calls[0]!;
     expect(url).toBe('https://dashboard.example.test/api/agent/heartbeat');
-    expect(JSON.parse(String(init.body))).toEqual({ epoch: 'epoch-a', bootId: 'boot-a', queuedThrough: 1, queueDepth: 1, eventLoss: false });
+    expect(JSON.parse(String(init.body))).toEqual({ epoch: 'epoch-a', bootId: 'boot-a', queuedThrough: 1, firstPendingSequence: 1, queueDepth: 1, eventLoss: false });
+  });
+
+  it('allows a longer timeout for the first installation heartbeat', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+      await createCollectorClient(config, fetcher).heartbeat({ epoch: 'epoch-a', bootId: 'boot-a', queuedThrough: 0, firstPendingSequence: 1, queueDepth: 0, eventLoss: false }, 15_000);
+      expect(timeout).toHaveBeenCalledWith(15_000);
+    } finally { timeout.mockRestore(); }
   });
 
   it('does not treat malformed responses as durable acknowledgments', async () => {

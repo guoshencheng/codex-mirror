@@ -1,27 +1,21 @@
-import { createInterface } from 'node:readline/promises';
-import { createAdmin } from '../src/server/auth/admin';
-import { closeAuthDatabasePool } from '../src/server/auth/database';
-import { readHiddenInput } from '../src/server/auth/terminal';
+import { randomInt } from 'node:crypto';
+import { open, mkdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 
+const TOKEN_ALPHABET = '23456789abcdefghjkmnpqrstvwxyz';
+
+// A new file is required: never overwrite an existing credential backup.
 async function main(): Promise<void> {
-  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') throw new Error('PASSWORD_PROMPT_REQUIRES_TTY');
-  const terminal = createInterface({ input: process.stdin, output: process.stdout });
+  const output = process.argv.find(arg => arg.startsWith('--output='))?.slice('--output='.length);
+  if (!output) throw new Error('Use --output=/private/path/user-token.txt');
+  const path = resolve(output);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const file = await open(path, 'wx', 0o600);
+  const token = Array.from({ length: 8 }, () => TOKEN_ALPHABET[randomInt(TOKEN_ALPHABET.length)]).join('');
   try {
-    const username = (await terminal.question('管理员账号（通常为邮箱）: ')).trim();
-    terminal.close();
-    const password = await readHiddenInput('管理员密码（至少 12 个字符）: ');
-    const confirmation = await readHiddenInput('再次输入密码: ');
-    if (password !== confirmation) throw new Error('PASSWORDS_DO_NOT_MATCH');
-    const admin = await createAdmin(username, password);
-    process.stdout.write(`管理员已创建：${admin.username}\n`);
-  } finally {
-    terminal.close();
-    await closeAuthDatabasePool();
-  }
+    await file.writeFile(token+'\n');
+    await file.sync();
+    console.log(`用户 Token 已保存到 ${path}（权限 0600）。重新配置服务使用新文件后，旧登录会话即失效。`);
+  } finally { await file.close(); }
 }
-
-main().catch(error => {
-  const code = error instanceof Error ? error.message : 'ADMIN_CREATE_FAILED';
-  process.stderr.write(`${code}\n`);
-  process.exitCode = 1;
-});
+main().catch(error => { console.error(error instanceof Error ? error.message : 'TOKEN_CREATE_FAILED'); process.exitCode=1; });

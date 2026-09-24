@@ -1,14 +1,13 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
-import { createAdmin } from '../../src/server/auth/admin';
 import { createDevice } from '../../src/server/events/devices';
 
-const TEST_USERNAME = 'owner@example.test';
-const TEST_PASSWORD = 'correct horse battery staple 7';
+const TEST_PASSWORD = 'cdu_' + 'a'.repeat(43);
 
 function testConnectionString(): string {
   const value = process.env.E2E_DATABASE_URL ?? process.env.TEST_DATABASE_URL ?? 'postgresql:///codex_status_dashboard_test';
@@ -30,6 +29,8 @@ async function main(): Promise<void> {
   let app: Pool | undefined;
   let child: ReturnType<typeof spawn> | undefined;
   let stopping = false;
+  const tokenDirectory = await mkdtemp(resolve(tmpdir(), 'codex-e2e-token-'));
+  const tokenFile = resolve(tokenDirectory, 'user-token');
 
   try {
     await owner.query(`CREATE SCHEMA ${schema}`);
@@ -37,11 +38,10 @@ async function main(): Promise<void> {
     scopedUrl.searchParams.set('options', `-c search_path=${schema}`);
     app = new Pool({ connectionString: scopedUrl.toString(), max: 5 });
     const migrations = (await readdir(migrationDir)).filter(file => /^\d{3}-.*\.sql$/.test(file)).sort();
-    if (migrations.length !== 3) throw new Error('EXPECTED_THREE_MIGRATIONS');
     for (const migration of migrations) {
       await app.query(await readFile(resolve(migrationDir, migration), 'utf8'));
     }
-    await createAdmin(TEST_USERNAME, TEST_PASSWORD, app);
+    await writeFile(tokenFile, `${TEST_PASSWORD}\n`, { mode: 0o600 });
     const device = await createDevice('Playwright test device', app);
     await writeFile(fixtureFile, JSON.stringify({ deviceId: device.id, deviceToken: device.token, epoch: randomUUID() }), { mode: 0o600 });
 
@@ -52,6 +52,7 @@ async function main(): Promise<void> {
         DATABASE_URL: scopedUrl.toString(),
         DATABASE_DIRECT_URL: scopedUrl.toString(),
         APP_ORIGIN: origin,
+        DASHBOARD_USER_TOKEN_FILE: tokenFile,
         NODE_ENV: 'development',
       },
       stdio: 'inherit',
@@ -76,6 +77,7 @@ async function main(): Promise<void> {
     await owner.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await owner.end();
     await unlink(fixtureFile).catch(() => undefined);
+    await rm(tokenDirectory, { recursive: true, force: true });
   }
 }
 

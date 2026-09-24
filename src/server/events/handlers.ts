@@ -13,8 +13,17 @@ function ingestStatus(code: string): number {
 export function createAgentHandlers(pool: Pool): {
   events(request: Request): Promise<Response>;
   heartbeat(request: Request): Promise<Response>;
+  identity(request: Request): Promise<Response>;
 } {
   return {
+    async identity(request) {
+      try {
+        const device = await authenticateDevice(request, pool);
+        return device ? noStoreJson({ deviceId: device.id }) : noStoreJson({ error: 'UNAUTHORIZED' }, 401);
+      } catch {
+        return noStoreJson({ error: 'SERVICE_UNAVAILABLE' }, 503);
+      }
+    },
     async events(request) {
       let device: { id: string } | null;
       try { device = await authenticateDevice(request, pool); }

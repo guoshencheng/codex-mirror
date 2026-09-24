@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { defaultConfigPath, loadCollectorConfig } from './config';
@@ -7,6 +8,7 @@ import { defaultHooksConfigPath, installHooks, uninstallHooks } from './install'
 import { resolveProject } from './project';
 import { openQueue } from './queue';
 import { runCollectorLoop } from './heartbeat';
+import { readThreadTitles } from './title';
 
 const maxHookInputBytes = 1_000_000;
 
@@ -48,9 +50,9 @@ async function runHook(eventArgument?: string): Promise<void> {
     const config = loadCollectorConfig();
     queue = openQueue(config.queuePath, 100_000_000, config.deviceId);
     const raw = input.value as Record<string, unknown>;
-    const project = resolveProject(raw.cwd, config.deviceId, queue);
+    const project = event.type === 'tool.finished' ? null : resolveProject(raw.cwd, config.deviceId, queue);
     const metadata = { ...event.metadata, ...(project ?? {}) };
-    queue.append({ ...event, metadata });
+    queue.appendHook({ ...event, metadata });
   } catch {
     // Keep hook failures out of model context and never make tracking control Codex.
     process.stderr.write('codex-status-dashboard: event capture failed\n');
@@ -74,6 +76,13 @@ async function runDaemon(): Promise<void> {
       bootId: randomUUID(),
       heartbeat: input => client.heartbeat(input),
       upload: client.upload,
+      refreshMetadata: async () => {
+        const now = new Date().toISOString();
+        const candidates = queue.titleCandidates(now, 10);
+        if (candidates.length === 0) return;
+        const titles = await readThreadTitles(candidates, { signal: controller.signal });
+        for (const [sessionId, title] of titles) queue.recordTitleCheck(sessionId, title, new Date().toISOString());
+      },
       signal: controller.signal,
       onError: code => process.stderr.write(`codex-status-dashboard: ${code}\n`),
     });
@@ -108,7 +117,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
   process.exitCode = 2;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   main().catch(() => {
     process.stderr.write('codex-status-dashboard: command failed\n');
     process.exitCode = 1;

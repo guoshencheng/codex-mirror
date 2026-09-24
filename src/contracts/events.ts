@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const eventTypes = [
-  'session.started', 'turn.started', 'tool.started', 'tool.finished',
-  'approval.requested', 'turn.stopped', 'turn.interrupted', 'session.ended',
+  'session.started', 'turn.started', 'tool.started', 'tool.finished', 'approval.requested', 'turn.resumed',
+  'turn.stopped', 'turn.interrupted', 'session.ended', 'session.metadata.updated',
 ] as const;
 
 export type EventType = typeof eventTypes[number];

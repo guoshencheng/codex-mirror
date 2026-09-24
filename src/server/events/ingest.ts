@@ -14,6 +14,7 @@ const heartbeatSchema = z.object({
   epoch: z.string().min(1).max(128),
   bootId: z.string().min(1).max(128),
   queuedThrough: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  firstPendingSequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
   queueDepth: z.number().int().min(0).max(100_000_000),
   eventLoss: z.boolean(),
 }).strict();
@@ -191,6 +192,9 @@ export async function recordHeartbeat(deviceId: string, raw: unknown, receivedAt
   const parsed = heartbeatSchema.safeParse(raw);
   if (!parsed.success) throw new EventIngestError('INVALID_HEARTBEAT');
   const heartbeat = parsed.data;
+  if (heartbeat.firstPendingSequence !== undefined && heartbeat.firstPendingSequence > heartbeat.queuedThrough + 1) {
+    throw new EventIngestError('INVALID_HEARTBEAT');
+  }
   const pool = options.pool ?? eventDatabasePool();
   const client = await pool.connect();
   try {
@@ -212,6 +216,15 @@ export async function recordHeartbeat(deviceId: string, raw: unknown, receivedAt
       await client.query('UPDATE device_streams SET recovery_through = GREATEST(recovery_through, $3) WHERE device_id = $1 AND epoch = $2',
         [deviceId, heartbeat.epoch, heartbeat.queuedThrough]);
       await markSessionsUnconfirmed(client, deviceId);
+    }
+    // A migrated SQLite queue may start after sequence 1 because older events were
+    // already acknowledged by the previous server. Advance only before this server
+    // has received any event for the stream.
+    if (heartbeat.firstPendingSequence !== undefined) {
+      await client.query(`UPDATE device_streams SET contiguous_sequence = GREATEST(contiguous_sequence, $3::bigint - 1)
+        WHERE device_id = $1 AND epoch = $2 AND active
+          AND NOT EXISTS (SELECT 1 FROM agent_events WHERE device_id = $1 AND epoch = $2)`,
+        [deviceId, heartbeat.epoch, heartbeat.firstPendingSequence]);
     }
     await client.query(`UPDATE device_streams SET boot_id = $3, last_heartbeat_at = $4,
       queue_lost = queue_lost OR $5, incomplete = incomplete OR $5

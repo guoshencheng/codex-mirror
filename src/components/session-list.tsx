@@ -55,7 +55,6 @@ export default function SessionList({ sessions, devices }: SessionListProps) {
         {stateIsWorkingButUncertain
           ? <p className="ds-notice">当前执行情况未知（{connectionHint(device)}）</p>
           : null}
-        {session.currentTool ? <p className="ds-meta">当前工具：{session.currentTool}</p> : null}
         <p className="ds-meta">最近事件：<time dateTime={session.lastEventAt}>{displayTimestamp(session.lastEventAt)}</time></p>
       </article>;
     })}

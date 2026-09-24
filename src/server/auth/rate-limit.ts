@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { authDatabasePool } from './database';
 
 const WINDOW_MILLISECONDS = 15 * 60 * 1_000;
@@ -29,7 +29,7 @@ export function loginLimitKey(ip: string, username: string): string {
 export async function consumeLoginAttempt(
   ip: string,
   username: string,
-  pool: Pool = authDatabasePool(),
+  pool: Pool | PoolClient = authDatabasePool(),
   now = new Date(),
 ): Promise<LoginLimitResult> {
   const key = loginLimitKey(ip, username);

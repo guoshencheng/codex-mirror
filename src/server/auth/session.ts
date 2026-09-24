@@ -1,8 +1,9 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
 import { authDatabasePool } from './database';
 import { SESSION_LIFETIME_SECONDS, sessionCookieName } from './cookie';
 import { hasValidOrigin, hashCsrfToken, csrfTokenMatches } from './csrf';
+import { configuredUserTokenFingerprint } from './configured-token';
 
 export interface CreatedAdminSession {
   token: string;
@@ -19,6 +20,18 @@ function tokenHash(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function sessionSignature(nonce: string): string {
+  return createHmac('sha256', Buffer.from(configuredUserTokenFingerprint(), 'hex'))
+    .update('admin-session-v1:').update(nonce).digest('base64url');
+}
+
+function validSessionSignature(token: string): boolean {
+  if (!/^[A-Za-z0-9_-]{86}$/.test(token)) return false;
+  const signature = Buffer.from(token.slice(43));
+  const expected = Buffer.from(sessionSignature(token.slice(0, 43)));
+  return signature.length === expected.length && timingSafeEqual(signature, expected);
+}
+
 function readCookie(request: Request, name: string): string | null {
   const value = request.headers.get('cookie');
   if (!value) return null;
@@ -33,7 +46,8 @@ function readCookie(request: Request, name: string): string | null {
 }
 
 export async function createAdminSession(adminId: string, pool: Pool = authDatabasePool(), now = new Date()): Promise<CreatedAdminSession> {
-  const token = randomBytes(32).toString('base64url');
+  const nonce = randomBytes(32).toString('base64url');
+  const token = nonce + sessionSignature(nonce);
   const csrfToken = randomBytes(32).toString('base64url');
   const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_SECONDS * 1_000);
   await pool.query(`INSERT INTO admin_sessions(id, admin_id, token_hash, csrf_hash, created_at, expires_at)
@@ -43,7 +57,7 @@ export async function createAdminSession(adminId: string, pool: Pool = authDatab
 
 export async function requireAdmin(request: Request, pool?: Pool, now = new Date()): Promise<AuthenticatedAdmin | null> {
   const token = readCookie(request, sessionCookieName());
-  if (!token) return null;
+  if (!token || !validSessionSignature(token)) return null;
   const database = pool ?? authDatabasePool();
   const result = await database.query(`SELECT s.id AS session_id, s.admin_id
     FROM admin_sessions s JOIN admins a ON a.id = s.admin_id

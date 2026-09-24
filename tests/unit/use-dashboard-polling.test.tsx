@@ -95,6 +95,24 @@ describe('useDashboardPolling', () => {
     expect(dashboardReads).toBe(3);
   });
 
+  it('leaves scheduled managed account refreshes to the worker', async () => {
+    vi.useFakeTimers();
+    const account = {
+      id: 'api_kimi', providerId: 'kimi-code-cn', label: 'Kimi', deviceIds: [], snapshot: null,
+      lastAttemptAt: new Date(Date.now() - 360_000).toISOString(), lastSuccessAt: null,
+      errorCode: null, refreshStatus: 'idle' as const,
+    };
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async input => {
+      if (String(input) === '/api/dashboard') return Response.json({ ...initial, accounts: [account] });
+      if (String(input) === '/api/provider-accounts/api_kimi/refresh') return Response.json({ status: 'success' });
+      return Response.json({ csrfToken: 'csrf-token-with-at-least-forty-characters-0123456789' });
+    });
+    render(<Harness navigate={vi.fn()} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/provider-accounts/api_kimi/refresh', expect.anything());
+  });
+
   it('keeps the last snapshot after a failed poll and recovers on the next successful poll', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.mocked(fetch);

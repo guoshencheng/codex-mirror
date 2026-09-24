@@ -13,6 +13,7 @@ export interface CollectorHeartbeat {
   epoch: string;
   bootId: string;
   queuedThrough: number;
+  firstPendingSequence: number;
   queueDepth: number;
   eventLoss: boolean;
 }
@@ -23,13 +24,13 @@ export class CollectorHttpError extends Error {
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-async function request(fetcher: Fetcher, url: string, token: string, body: object): Promise<Response> {
+async function request(fetcher: Fetcher, url: string, token: string, body: object, timeoutMs = 5_000): Promise<Response> {
   try {
     return await fetcher(url, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: 'error',
       cache: 'no-store',
     });
@@ -63,7 +64,7 @@ async function boundedJson(response: Response): Promise<unknown> {
 
 export function createCollectorClient(config: CollectorConfig, fetcher: Fetcher = fetch): {
   upload: UploadTransport;
-  heartbeat(input: CollectorHeartbeat): Promise<void>;
+  heartbeat(input: CollectorHeartbeat, timeoutMs?: number): Promise<void>;
 } {
   const base = config.serverUrl.replace(/\/$/, '');
   return {
@@ -76,8 +77,8 @@ export function createCollectorClient(config: CollectorConfig, fetcher: Fetcher 
       if (parsed.data.acknowledgedThrough > maxSent) throw new Error('INVALID_UPLOAD_RESPONSE');
       return parsed.data;
     },
-    async heartbeat(input: CollectorHeartbeat): Promise<void> {
-      const response = await request(fetcher, `${base}/api/agent/heartbeat`, config.deviceToken, input);
+    async heartbeat(input: CollectorHeartbeat, timeoutMs = 5_000): Promise<void> {
+      const response = await request(fetcher, `${base}/api/agent/heartbeat`, config.deviceToken, input, timeoutMs);
       if (!response.ok) throw new CollectorHttpError(response.status);
       if (!heartbeatResponseSchema.safeParse(await boundedJson(response)).success) throw new Error('INVALID_HEARTBEAT_RESPONSE');
     },

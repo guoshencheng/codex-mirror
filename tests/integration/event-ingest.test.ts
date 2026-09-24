@@ -46,6 +46,30 @@ function event(sequence: number, type: EventType, turnId: string | null = 't1', 
 function batch(...events: AgentEvent[]): EventBatch { return { epoch: 'epoch-a', events }; }
 
 describe('PostgreSQL-backed ordered event ingest', () => {
+  it('continues an adopted queue from its first pending sequence', async () => {
+    await withEventsDb(async pool => {
+      await recordHeartbeat('d1', { epoch: 'epoch-a', bootId: 'boot-a', queuedThrough: 42,
+        firstPendingSequence: 41, queueDepth: 2, eventLoss: false }, at, { pool });
+      expect(await ingestBatch('d1', batch(event(41, 'turn.started'), event(42, 'turn.stopped')), { pool, receivedAt: at }))
+        .toEqual({ epoch: 'epoch-a', acknowledgedThrough: 42 });
+      expect((await pool.query('SELECT state FROM sessions WHERE device_id = $1', ['d1'])).rows[0]?.state.state).toBe('STOPPED');
+    });
+  });
+  it('updates a late title without refreshing the execution activity timestamp', async () => {
+    await withEventsDb(async pool => {
+      await ingestBatch('d1', batch(event(1, 'turn.started')), { pool, receivedAt: at });
+      const before = (await pool.query('SELECT state FROM sessions WHERE device_id = $1 AND session_id = $2', ['d1', 's1'])).rows[0].state;
+      await ingestBatch('d1', batch(event(2, 'session.metadata.updated', null, {
+        occurredAt: '2026-09-22T00:05:00.000Z', metadata: { title: 'Actual task' },
+      })), { pool, receivedAt: '2026-09-22T00:05:01.000Z' });
+      const after = (await pool.query('SELECT title, state FROM sessions WHERE device_id = $1 AND session_id = $2', ['d1', 's1'])).rows[0];
+      expect(after.title).toBe('Actual task');
+      expect(after.state).toMatchObject({
+        state: 'WORKING', lastSequence: 2, lastEventAt: before.lastEventAt, lastReceivedAt: before.lastReceivedAt,
+      });
+    });
+  });
+
   it('buffers gaps, applies newly contiguous events once, and returns a contiguous acknowledgment', async () => {
     await withEventsDb(async pool => {
       const first = event(1, 'turn.started');

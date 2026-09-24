@@ -657,3 +657,9 @@ textarea::placeholder {
     flex: 1 1 auto;
   }
 }
+
+/* Keep installation commands readable without widening small screens. */
+.ds-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

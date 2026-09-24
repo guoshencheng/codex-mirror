@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,4 +53,11 @@ describe('collector command-line hooks', () => {
     }
     queue.close();
   });
+});
+
+it('runs the entry point when installed beneath a symlinked directory', async () => {
+ const directory=await mkdtemp(join(tmpdir(),'collector-entry-'));temporaryDirectories.push(directory);
+ const link=join(directory,'linked-cli.ts');await symlink(cli,link);
+ const result=spawnSync(process.execPath,['--import','tsx',link,'hook','Stop',marker],{cwd:root,input:'{}',encoding:'utf8'});
+ expect(result.stdout).toBe('{"continue":true}\n');
 });

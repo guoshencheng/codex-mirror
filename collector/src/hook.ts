@@ -31,10 +31,7 @@ export function normalizeHook(raw: unknown, now: () => Date = () => new Date()):
   const rawTurnId = raw.turn_id;
   if (typeof rawTurnId === 'string' && rawTurnId.length > 128) return null;
   const turnId = typeof rawTurnId === 'string' && rawTurnId.length > 0 ? rawTurnId : null;
-  const toolName = boundedText(raw.tool_name, 120);
-  if (['tool.started', 'tool.finished', 'approval.requested'].includes(type)
-    && typeof raw.tool_name === 'string' && raw.tool_name.length > 120) return null;
-
+  const toolName = boundedText(raw.tool_name, 120)?.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || undefined;
   let occurredAt: string;
   try { occurredAt = now().toISOString(); }
   catch { return null; }
@@ -45,6 +42,6 @@ export function normalizeHook(raw: unknown, now: () => Date = () => new Date()):
     turnId: type === 'session.started' || type === 'session.ended' ? null : turnId,
     type,
     occurredAt,
-    metadata: toolName && ['tool.started', 'tool.finished', 'approval.requested'].includes(type) ? { toolName } : {},
+    metadata: toolName && ['tool.started', 'approval.requested'].includes(type) ? { toolName } : {},
   };
 }

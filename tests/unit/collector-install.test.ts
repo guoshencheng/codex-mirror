@@ -47,6 +47,21 @@ describe('Codex Hooks installer', () => {
     expect(await readFile(path, 'utf8')).toBe(first);
   });
 
+  it('replaces the old managed PreToolUse hook and keeps personal hooks', async () => {
+    const { path } = await makeConfig({ hooks: {
+      PreToolUse: [{ hooks: [
+        { type: 'command', command: ownCommand('PreToolUse'), timeout: 3 },
+        { type: 'command', command: 'echo personal' },
+      ] }],
+    } });
+    await installHooks(path, { nodePath: '/usr/bin/node', cliPath: '/path with space/cli.js' });
+    const stored = JSON.parse(await readFile(path, 'utf8'));
+    expect(stored.hooks.PreToolUse).toEqual([
+      { hooks: [{ type: 'command', command: 'echo personal' }] },
+      { hooks: [{ type: 'command', command: ownCommand('PreToolUse'), timeout: 3 }] },
+    ]);
+  });
+
   it('removes only its own handler and retains unrelated handlers in the same event group', async () => {
     const { path } = await makeConfig({ hooks: {
       Stop: [{ hooks: [

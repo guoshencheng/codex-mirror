@@ -6,14 +6,16 @@ const stateByEvent: Readonly<Record<EventType, SessionState['state']>> = {
   'tool.started': 'WORKING',
   'tool.finished': 'WORKING',
   'approval.requested': 'WAITING_APPROVAL',
+  'turn.resumed': 'WORKING',
   'turn.stopped': 'STOPPED',
   'turn.interrupted': 'INTERRUPTED',
   'session.ended': 'ENDED',
+  'session.metadata.updated': 'UNKNOWN',
 };
 
 const activeStates = new Set<SessionState['state']>(['WORKING', 'WAITING_APPROVAL']);
 const terminalTurnEvents = new Set<EventType>(['turn.stopped', 'turn.interrupted']);
-const lateWorkEvents = new Set<EventType>(['tool.started', 'tool.finished', 'approval.requested']);
+const lateWorkEvents = new Set<EventType>(['tool.started', 'tool.finished', 'turn.resumed', 'approval.requested']);
 
 function initialState(event: AgentEvent, receivedAt: string): SessionState {
   const confirmed = event.type === 'session.started' || (event.type === 'turn.started' && event.turnId !== null);
@@ -40,6 +42,9 @@ function withEvent(previous: SessionState, event: AgentEvent, receivedAt: string
 
 export function reduceSession(previous: SessionState | null, event: AgentEvent, receivedAt: string): SessionState {
   if (previous && event.sequence <= previous.lastSequence) return previous;
+  if (event.type === 'session.metadata.updated') {
+    return previous ? { ...previous, lastSequence: event.sequence } : initialState(event, receivedAt);
+  }
   if (!previous) return initialState(event, receivedAt);
 
   if (event.type === 'turn.started') {
@@ -77,19 +82,21 @@ export function reduceSession(previous: SessionState | null, event: AgentEvent, 
     case 'tool.started':
       return withEvent(previous, event, receivedAt, {
         state: mapped,
-        confidence: event.turnId === null ? 'unconfirmed' : previous.confidence,
+        confidence: event.turnId === null ? 'unconfirmed' : 'confirmed',
         currentTool: event.metadata.toolName ?? null,
       });
     case 'tool.finished':
+    case 'turn.resumed':
       return withEvent(previous, event, receivedAt, {
         state: mapped,
-        confidence: event.turnId === null ? 'unconfirmed' : previous.confidence,
-        currentTool: null,
+        confidence: event.turnId === null ? 'unconfirmed' : 'confirmed',
+        currentTool: event.type === 'tool.finished' && event.metadata.toolName
+          && previous.currentTool !== event.metadata.toolName ? previous.currentTool : null,
       });
     case 'approval.requested':
       return withEvent(previous, event, receivedAt, {
         state: mapped,
-        confidence: event.turnId === null ? 'unconfirmed' : previous.confidence,
+        confidence: event.turnId === null ? 'unconfirmed' : 'confirmed',
         currentTool: null,
       });
     case 'turn.stopped':

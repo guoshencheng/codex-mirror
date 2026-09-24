@@ -1,0 +1,15 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev --ignore-scripts
+COPY display ./display
+COPY src/contracts ./src/contracts
+COPY src/components ./src/components
+COPY src/app/globals.css ./src/app/globals.css
+COPY src/lib/display-connection.ts ./src/lib/display-connection.ts
+RUN npm run display:build
+
+FROM nginx:1.29-alpine
+COPY deploy/display.nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist-display /usr/share/nginx/html/display
+EXPOSE 80

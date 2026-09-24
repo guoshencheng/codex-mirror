@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     include: ['tests/integration/**/*.test.ts'],
     environment: 'node',
+    setupFiles: ['tests/support/configured-user-token.ts'],
     testTimeout: 30_000,
     hookTimeout: 30_000,
     pool: 'forks',

@@ -4,7 +4,6 @@ import { Pool } from 'pg';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../src/contracts/events';
 import type { ProviderSnapshot } from '../../src/contracts/quota';
-import { createAdmin } from '../../src/server/auth/admin';
 import { sessionCookieName } from '../../src/server/auth/cookie';
 import { createAdminSession } from '../../src/server/auth/session';
 import { createDashboardHandlers } from '../../src/server/read-model/handlers';
@@ -13,7 +12,6 @@ import { ingestBatch, recordHeartbeat } from '../../src/server/events/ingest';
 import { createDevice } from '../../src/server/events/devices';
 
 const appOrigin = 'http://dashboard.test';
-const password = 'correct horse battery staple 7';
 const sessionCookie = (token: string) => `${sessionCookieName()}=${token}`;
 const previousOrigin = process.env.APP_ORIGIN;
 
@@ -33,10 +31,9 @@ async function withDashboardDb<T>(run: (pool: Pool) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString, max: 10, options: `-c search_path=${schema}` });
   process.env.APP_ORIGIN = appOrigin;
   try {
-    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql']) {
+    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql', '007-configured-user-token.sql']) {
       await pool.query(await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8'));
     }
-    await createAdmin('owner@example.test', password, pool);
     return await run(pool);
   } finally {
     await pool.end();

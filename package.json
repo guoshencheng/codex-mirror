@@ -22,13 +22,18 @@
     "device:create": "tsx scripts/create-device.ts",
     "device:revoke": "tsx scripts/revoke-device.ts",
     "collector": "tsx collector/src/cli.ts",
-    "collector:build": "tsup --config tsup.collector.config.ts"
+    "collector:build": "tsup --config tsup.collector.config.ts",
+    "collector:package": "npm run collector:build && node scripts/package-collector.mjs",
+    "display:build": "vite build --config display/vite.config.ts",
+    "display:dev": "vite --config display/vite.config.ts",
+    "prebuild": "npm run collector:package"
   },
   "keywords": [],
   "author": "",
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "antd": "^6.6.5",
     "better-sqlite3": "13.0.3",
     "next": "16.3.5",
     "pg": "8.23.0",
@@ -49,6 +54,7 @@
     "tsup": "8.5.1",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
+    "vite": "8.3.0",
     "vitest": "5.0.1"
   },
   "private": "true",

@@ -15,6 +15,7 @@ export function heartbeatPayload(queue: Pick<CollectorQueue, 'health'>, bootId: 
     epoch: health.epoch,
     bootId,
     queuedThrough: health.lastSequence,
+    firstPendingSequence: health.firstPendingSequence,
     queueDepth: health.queueDepth,
     eventLoss: health.eventLoss,
   };
@@ -58,6 +59,7 @@ export async function runCollectorLoop(options: {
   bootId: string;
   heartbeat(input: CollectorHeartbeat): Promise<void>;
   upload: UploadTransport;
+  refreshMetadata?: () => Promise<void>;
   signal: AbortSignal;
   heartbeatIntervalMs?: number;
   random?: () => number;
@@ -69,6 +71,14 @@ export async function runCollectorLoop(options: {
   let failures = 0;
   while (!options.signal.aborted) {
     try {
+      if (options.refreshMetadata) {
+        try { await options.refreshMetadata(); }
+        catch (error) {
+          const code = error instanceof Error && /^TITLE_[A-Z_]{3,40}$/.test(error.message)
+            ? error.message : 'TITLE_METADATA_FAILED';
+          options.onError?.(code);
+        }
+      }
       // Recovery watermark is acknowledged before sending any queued event from this boot.
       await options.heartbeat(heartbeatPayload(options.queue, options.bootId));
       await uploadOnce(options.queue, options.upload);

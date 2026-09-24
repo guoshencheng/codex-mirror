@@ -1,0 +1,32 @@
+.settings-page { background: #f6f7fa; }
+body:has(.settings-page) { background: #f6f7fa; color-scheme: light; }
+.settings-page {
+  width: min(100%, 1200px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px 24px 56px;
+  color: #252630;
+}
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.settings-header .ant-typography { margin-bottom: 5px; }
+.settings-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 20px; align-items: start; }
+.settings-alert { margin-bottom: 16px; }
+.settings-page .ant-input, .settings-page .ant-input-affix-wrapper, .settings-page .ant-select-selector {
+  min-height: 32px;
+  background: #fff !important;
+  color: #252630 !important;
+}
+.settings-page .ant-input-affix-wrapper input { min-height: 0 !important; border: 0 !important; background: transparent !important; }
+.settings-page .ant-card { min-width: 0; }
+.settings-display-card { max-width: 680px; }
+.settings-page .ant-card .ds-stack { gap: 8px; }
+@media (max-width: 800px) {
+  .settings-header { flex-direction: column; }
+  .settings-grid { grid-template-columns: minmax(0, 1fr); }
+}

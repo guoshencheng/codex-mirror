@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { GET as getSession } from '../../src/app/api/auth/session/route';
@@ -9,11 +9,10 @@ import { POST as postLogin } from '../../src/app/api/auth/login/route';
 import { POST as postLogout } from '../../src/app/api/auth/logout/route';
 import { closeAuthDatabasePool } from '../../src/server/auth/database';
 import { requireAdmin, verifyCsrf } from '../../src/server/auth/session';
-import { createAdmin, updateAdminPassword } from '../../src/server/auth/admin';
 import { serializeSessionCookie } from '../../src/server/auth/cookie';
 import { createDevice } from '../../src/server/events/devices';
 
-const TEST_PASSWORD = 'correct horse battery staple 7';
+const TEST_PASSWORD = 'cdu_' + 'a'.repeat(43);
 
 function testConnectionString(): string {
   const value = process.env.TEST_DATABASE_URL ?? 'postgresql:///codex_status_dashboard_test';
@@ -86,7 +85,7 @@ class AuthHttp {
 
   async login(username = 'owner@example.test', password = TEST_PASSWORD, origin?: string): Promise<Response> {
     const response = await this.request('/api/auth/login', {
-      method: 'POST', body: { username, password }, ...(origin ? { origin } : {}),
+      method: 'POST', body: { token: password }, ...(origin ? { origin } : {}),
     });
     if (response.ok) this.csrfToken = String((await response.clone().json() as { csrfToken: string }).csrfToken);
     return response;
@@ -100,7 +99,7 @@ describe('administrator authentication over HTTP', () => {
     const setup = await admin.connect();
     try { await setup.query(`CREATE SCHEMA ${schema}`); } finally { setup.release(); }
     pool = new Pool({ connectionString: testConnectionString(), max: 4, options: `-c search_path=${schema}` });
-    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql']) {
+    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql', '007-configured-user-token.sql']) {
       await pool.query(await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8'));
     }
 
@@ -130,7 +129,6 @@ describe('administrator authentication over HTTP', () => {
     if (!address || typeof address === 'string') throw new Error('TEST_SERVER_NOT_LISTENING');
     baseUrl = `http://127.0.0.1:${address.port}`;
     process.env.APP_ORIGIN = baseUrl;
-    await createAdmin('owner@example.test', TEST_PASSWORD, pool);
   }, 30_000);
 
   beforeEach(async () => {
@@ -150,7 +148,7 @@ describe('administrator authentication over HTTP', () => {
     }
   });
 
-  it('accepts a correct password and returns a secure session cookie without storing the raw tokens', async () => {
+  it('accepts a correct user Token and returns a secure session cookie without storing the raw tokens', async () => {
     const auth = new AuthHttp(baseUrl);
     const response = await auth.login();
     expect(response.status).toBe(200);
@@ -179,9 +177,10 @@ describe('administrator authentication over HTTP', () => {
       headers: { authorization: `Bearer ${device.token}` }, redirect: 'manual',
     });
     expect(response.status).toBe(401);
+    expect((await new AuthHttp(baseUrl).login('unused', device.token)).status).toBe(401);
   });
 
-  it('uses the same unauthorized response for unknown users and incorrect passwords', async () => {
+  it('uses the same unauthorized response for unknown users and incorrect user Tokens', async () => {
     const wrongPassword = await new AuthHttp(baseUrl).login('owner@example.test', 'wrong password 1234');
     const unknownUser = await new AuthHttp(baseUrl).login('not-an-admin@example.test', 'wrong password 1234');
     expect(wrongPassword.status).toBe(401);
@@ -189,11 +188,16 @@ describe('administrator authentication over HTTP', () => {
     expect(await wrongPassword.text()).toBe(await unknownUser.text());
   });
 
-  it('allows one administrator and enforces the password length and UTF-8 byte limits', async () => {
-    await expect(createAdmin('another@example.test', TEST_PASSWORD, pool)).rejects.toThrow('ADMIN_ALREADY_EXISTS');
-    await expect(createAdmin('another@example.test', 'short', pool)).rejects.toThrow('INVALID_ADMIN_PASSWORD');
-    await expect(createAdmin('another@example.test', '🙂'.repeat(257), pool)).rejects.toThrow('INVALID_ADMIN_PASSWORD');
-    expect(await pool.query('SELECT id FROM admins')).toMatchObject({ rowCount: 1 });
+  it('rejects legacy username/password login requests', async () => {
+    const auth = new AuthHttp(baseUrl);
+    const result = await auth.request('/api/auth/login', {method: 'POST', body: {username: 'owner@example.test', password: TEST_PASSWORD}});
+    expect(result.status).toBe(400);
+  });
+
+  it('keeps the configured user Token out of the administrator table', async () => {
+    const records = await pool.query('SELECT id, password_hash FROM admins');
+    expect(records.rowCount).toBe(1);
+    expect(records.rows[0]).toEqual({ id: 'owner', password_hash: '0'.repeat(64) });
   });
 
   it('enforces the production cookie prefix and Secure attribute', () => {
@@ -219,7 +223,7 @@ describe('administrator authentication over HTTP', () => {
           'x-test-client-ip': '203.0.113.8',
           'x-forwarded-for': `198.51.100.${attempt + 1}`,
         },
-        body: JSON.stringify({ username: 'owner@example.test', password: 'wrong password 1234' }),
+        body: JSON.stringify({ token: 'wrong password 1234' }),
       });
       responses.push(response.status);
     }
@@ -239,12 +243,12 @@ describe('administrator authentication over HTTP', () => {
     const duplicate = new Request(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: [['origin', baseUrl], ['origin', 'https://evil.example'], ['content-type', 'application/json']],
-      body: JSON.stringify({ username: 'owner@example.test', password: TEST_PASSWORD }),
+      body: JSON.stringify({ token: TEST_PASSWORD }),
     });
     const malformed = new Request(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { origin: `${baseUrl}/unexpected-path`, 'content-type': 'application/json' },
-      body: JSON.stringify({ username: 'owner@example.test', password: TEST_PASSWORD }),
+      body: JSON.stringify({ token: TEST_PASSWORD }),
     });
     expect((await postLogin(duplicate)).status).toBe(403);
     expect((await postLogin(malformed)).status).toBe(403);
@@ -277,7 +281,7 @@ describe('administrator authentication over HTTP', () => {
     const response = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { origin: baseUrl, 'content-type': 'application/json' },
-      body: JSON.stringify({ username: 'owner@example.test', password: 'x'.repeat(5_000) }),
+      body: JSON.stringify({ token: 'x'.repeat(5_000) }),
     });
     expect(response.status).toBe(413);
   });
@@ -295,15 +299,15 @@ describe('administrator authentication over HTTP', () => {
     expect((await auth.request('/api/test/protected')).status).toBe(401);
   });
 
-  it('revokes every existing session when the administrator password is updated', async () => {
+  it('invalidates existing sessions when the configured user Token changes', async () => {
     const auth = new AuthHttp(baseUrl);
     await auth.login();
     await auth.login();
     expect(await pool.query('SELECT id FROM admin_sessions')).toMatchObject({ rowCount: 2 });
-    expect(await updateAdminPassword('owner', 'a different long secure password 8', pool)).toBe(true);
+    await writeFile(process.env.DASHBOARD_USER_TOKEN_FILE!, `cdu_${'b'.repeat(43)}\n`);
     expect((await auth.request('/api/test/protected')).status).toBe(401);
-    const updated = await new AuthHttp(baseUrl).login('owner@example.test', 'a different long secure password 8');
+    const updated = await new AuthHttp(baseUrl).login('owner@example.test', 'cdu_' + 'b'.repeat(43));
     expect(updated.status).toBe(200);
-    expect(await pool.query('SELECT id FROM admin_sessions')).toMatchObject({ rowCount: 1 });
+    expect(await pool.query('SELECT id FROM admin_sessions')).toMatchObject({ rowCount: 3 });
   });
 });

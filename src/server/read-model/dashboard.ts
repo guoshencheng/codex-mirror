@@ -29,7 +29,7 @@ function refreshState(row: {
   const attempt = row.last_attempt_at ? new Date(row.last_attempt_at).getTime() : null;
   const success = row.last_success_at ? new Date(row.last_success_at).getTime() : null;
   if (attempt !== null && (success === null || attempt > success) && now.getTime() - attempt < 120_000) return 'running';
-  if (manual !== null && (attempt === null || attempt < manual)) return 'queued';
+  if (manual !== null && (attempt === null || attempt < manual)) return now.getTime() - manual < 120_000 ? 'queued' : 'error';
   if (row.error_code) return 'error';
   return 'idle';
 }

@@ -2,6 +2,7 @@ node_modules/
 .next/
 *.tsbuildinfo
 dist-*/
+dist-display/
 dist/
 coverage/
 playwright-report/
@@ -14,3 +15,6 @@ runtime/
 *.sqlite-*
 .worktrees/
 .superpowers/
+.vercel/
+
+public/collector/

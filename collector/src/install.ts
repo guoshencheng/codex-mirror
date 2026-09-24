@@ -13,6 +13,7 @@ export interface InstallOptions {
   nodePath?: string;
   cliPath?: string;
   dryRun?: boolean;
+  configPath?: string;
 }
 
 export interface InstallResult {
@@ -109,7 +110,8 @@ function buildMergedConfig(config: Record<string, unknown>, options: InstallOpti
   const cliPath = resolve(options.cliPath ?? process.argv[1] ?? 'collector/src/cli.ts');
   const prior = withoutManagedHandlers(config.hooks as Record<string, unknown>);
   for (const event of hookEvents) {
-    const command = `${shellQuote(nodePath)} ${shellQuote(cliPath)} hook ${event} ${managedMarker}`;
+    const prefix = options.configPath ? `COLLECTOR_CONFIG=${shellQuote(resolve(options.configPath))} ` : '';
+    const command = `${prefix}${shellQuote(nodePath)} ${shellQuote(cliPath)} hook ${event} ${managedMarker}`;
     const handler = { type: 'command', command, timeout: 3 };
     const current = prior[event] ?? [];
     prior[event] = [...current, { hooks: [handler] }];

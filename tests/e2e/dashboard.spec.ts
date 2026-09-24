@@ -31,9 +31,9 @@ test('applies reported events on the next dashboard poll, shows an offline devic
   expect(streamReads).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await page.getByRole('button', { name: '面板菜单' }).click();
-  await page.getByRole('link', { name: '设备', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '设备接入' })).toBeVisible();
+  await page.getByRole('link', { name: '打开设置' }).click();
+  await page.getByRole('tab', { name: '采集设备' }).click();
+  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
   await expect(page.getByRole('button', { name: '生成一次性安装命令' })).toBeVisible();
   await expect(page.getByText(/15 分钟有效、只能注册一台设备/)).toBeVisible();
   await page.getByRole('button', { name: '生成一次性安装命令' }).click();
@@ -66,10 +66,8 @@ test('starts Codex device login from the account view', async ({ page }) => {
     contentType: 'application/json', body: JSON.stringify({ id, status: 'awaiting',
       verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234' }),
   }));
-  await page.goto('/');
-  await page.getByRole('button', { name: '面板菜单' }).click();
-  await page.getByRole('button', { name: '添加账号' }).click();
-  await page.getByRole('button', { name: '登录 Codex' }).click();
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Codex 登录' }).click();
   await page.getByLabel('账号名称').fill('Codex Personal');
   await page.getByRole('button', { name: '开始 Codex 登录' }).click();
   await expect(page.getByText('ABCD-1234')).toBeVisible();

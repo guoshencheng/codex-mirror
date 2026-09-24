@@ -86,7 +86,7 @@ describe('compact pixel dashboard', () => {
     expect(within(list).queryByText('100%')).not.toBeInTheDocument();
   });
 
-  it('preserves balance precision and exposes every metric plus account refresh in details', () => {
+  it('preserves balance precision and exposes every metric in read-only details', () => {
     const snapshot = data(); const wallet = account('Wallet');
     wallet.snapshot!.metrics = [
       { kind: 'balance', key: 'wallet', label: '余额', currency: 'CNY', total: '0.00000001', granted: null, toppedUp: null },
@@ -97,8 +97,7 @@ describe('compact pixel dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看 Wallet account 额度详情' }));
     expect(screen.getByText('0.00000001', { exact: true })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Additional' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '刷新额度' }));
-    expect(transport.refreshQuota).toHaveBeenCalledWith('Wallet');
+    expect(screen.queryByRole('button', { name: '刷新额度' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '返回面板' }));
     expect(screen.getByRole('list', { name: '会话' })).toBeInTheDocument();
   });

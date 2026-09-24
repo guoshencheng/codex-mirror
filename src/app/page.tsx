@@ -17,5 +17,5 @@ export default async function HomePage() {
   if (!admin) redirect('/login');
 
   const dashboard = await getDashboard();
-  return <Dashboard initial={dashboard} />;
+  return <Dashboard initial={dashboard} settingsHref="/settings" />;
 }

@@ -1,0 +1,106 @@
+name: codex-status-dashboard
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codex_status_dashboard
+      POSTGRES_USER: dashboard
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dashboard -d codex_status_dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  migrate:
+    image: codex-status-dashboard-web:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    command: ["node_modules/.bin/tsx", "scripts/migrate.ts"]
+    environment:
+      DATABASE_DIRECT_URL: postgresql://dashboard:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/codex_status_dashboard
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://dashboard:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/codex_status_dashboard
+      DATABASE_DIRECT_URL: postgresql://dashboard:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/codex_status_dashboard
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+      DASHBOARD_DISPLAY_ORIGINS: ${DASHBOARD_DISPLAY_ORIGINS:-}
+      DASHBOARD_USER_TOKEN_FILE: /run/config/user-token
+      DEVICE_REGISTRATION_SECRET: ${DEVICE_REGISTRATION_SECRET:?Set DEVICE_REGISTRATION_SECRET}
+      PROVIDER_CREDENTIAL_KEY: ${PROVIDER_CREDENTIAL_KEY:?Set PROVIDER_CREDENTIAL_KEY}
+    volumes:
+      - type: bind
+        source: ../../private/user-token
+        target: /run/config/user-token
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:3100:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.provider-runtime
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_DIRECT_URL: postgresql://dashboard:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/codex_status_dashboard
+      PROVIDER_CREDENTIAL_KEY: ${PROVIDER_CREDENTIAL_KEY:?Set PROVIDER_CREDENTIAL_KEY}
+      PROVIDER_ACCOUNTS_FILE: /run/config/provider-accounts.json
+      PROVIDER_SECRETS_ROOT: /run/secrets
+      KIMI_CLI_COMMAND: /usr/local/bin/kimi-runtime
+      CODEX_RUNTIME_ROOT: /var/lib/dashboard-auth/codex
+      KIMI_RUNTIME_HOME: /var/lib/dashboard-auth/kimi
+      NODE_USE_ENV_PROXY: "1"
+      HTTP_PROXY: ${WORKER_PROXY:-}
+      HTTPS_PROXY: ${WORKER_PROXY:-}
+      ALL_PROXY: ${WORKER_PROXY:-}
+      NO_PROXY: ${WORKER_NO_PROXY:-localhost,127.0.0.1,db}
+    volumes:
+      - runtime-auth:/var/lib/dashboard-auth
+      - type: bind
+        source: ../../private/provider-accounts.json
+        target: /run/config/provider-accounts.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../private/secrets
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  display:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.display
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3101:80"
+
+volumes:
+  database:
+  runtime-auth:

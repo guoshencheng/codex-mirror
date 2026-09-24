@@ -16,11 +16,13 @@ export async function POST(request: Request): Promise<Response> {
   const body = parsed.value;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'INVALID_REQUEST' }, { status: 400, headers: NO_STORE });
   const values = body as Record<string, unknown>;
-  if (typeof values.username !== 'string' || typeof values.password !== 'string' || values.username.length > 120 || Buffer.byteLength(values.password, 'utf8') > 1_024) {
+  if (typeof values.token !== 'string' || values.token.length > 256 || !values.token || Object.keys(values).some(key => key !== 'token')) {
     return Response.json({ error: 'INVALID_REQUEST' }, { status: 400, headers: NO_STORE });
   }
 
-  const result = await authenticateAdmin(request, values.username, values.password);
+  let result;
+  try { result = await authenticateAdmin(request, values.token); }
+  catch { return Response.json({ error: 'AUTH_UNAVAILABLE' }, { status: 503, headers: NO_STORE }); }
   if (result.status === 'limited') {
     return Response.json({ error: 'RATE_LIMITED' }, {
       status: 429,
