@@ -1,5 +1,7 @@
 import type { DashboardAccount, DashboardDevice, DashboardSession } from '../contracts/dashboard';
 
+export const DASHBOARD_POLL_INTERVAL_MS = 10_000;
+
 export const sessionLabels: Record<DashboardSession['state'], string> = {
   IDLE: '待命', WORKING: '执行中', WAITING_APPROVAL: '待审批', STOPPED: '本轮停止',
   INTERRUPTED: '已中断', ENDED: '已结束', UNKNOWN: '状态未知',
@@ -38,11 +40,23 @@ export function ageText(at: string | null, now: Date): string {
   return `${Math.floor(seconds / 86400)} 天前`;
 }
 
-export function durationText(at: string | null, now: Date): string {
+function elapsedSeconds(at: string | null, now: Date): number | null {
   const timestamp = at ? Date.parse(at) : NaN;
-  if (!Number.isFinite(timestamp)) return '--:--';
-  const seconds = Math.max(0, Math.floor((now.getTime() - timestamp) / 1000));
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.floor((now.getTime() - timestamp) / 1000));
+}
+
+export function durationText(at: string | null, now: Date): string {
+  const seconds = elapsedSeconds(at, now);
+  if (seconds === null) return '--:--';
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours}h ${minutes % 60}m` : `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+export function syncCountdownText(at: string, now: Date): string {
+  const timestamp = Date.parse(at);
+  if (!Number.isFinite(timestamp)) return '同步时间未知';
+  const seconds = Math.max(0, Math.ceil((timestamp + DASHBOARD_POLL_INTERVAL_MS - now.getTime()) / 1000));
+  return seconds > 0 ? `${seconds} 秒后同步` : '即将同步';
 }

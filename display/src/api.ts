@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardDto } from '../../src/contracts/dashboard';
+import { DASHBOARD_POLL_INTERVAL_MS } from '../../src/components/pixel-dashboard-model';
 export { normalizeApiOrigin } from '../../src/lib/display-connection';
-
-const INTERVAL_MS = 10_000;
 
 function isDashboard(value: unknown): value is DashboardDto {
   if (!value || typeof value !== 'object') return false;
@@ -58,7 +57,7 @@ export function useDisplaySnapshot(apiOrigin: string | null, token: string | nul
     void refresh();
     const timer = setInterval(() => {
       if (document.visibilityState !== 'hidden') void refresh();
-    }, INTERVAL_MS);
+    }, DASHBOARD_POLL_INTERVAL_MS);
     return () => { mounted.current = false; clearInterval(timer); };
   }, [refresh]);
 

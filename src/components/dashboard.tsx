@@ -70,15 +70,19 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
   }, [detail]);
 
   const devicesById = new Map(data.devices.map(device => [device.id, device]));
-  const current = data.sessions.filter(session => isCurrentSession(session, devicesById.get(session.deviceId), syncHealthy));
+  const activeSessions = data.sessions.filter(session => session.state === 'WORKING' || session.state === 'WAITING_APPROVAL');
+  const current = activeSessions.filter(session => isCurrentSession(session, devicesById.get(session.deviceId), syncHealthy));
   const working = current.filter(session => session.state === 'WORKING');
   const waiting = current.filter(session => session.state === 'WAITING_APPROVAL').length;
+  const recentlyWorking = activeSessions.filter(session => session.state === 'WORKING').length;
+  const recentlyWaiting = activeSessions.filter(session => session.state === 'WAITING_APPROVAL').length;
   const online = data.devices.filter(device => device.connection === 'online').length;
-  const uncertain = data.sessions.length - current.length;
   const offline = !syncHealthy || (data.devices.length > 0 && online === 0);
-  const title = offline ? '连接待恢复' : waiting ? '等你点个头' : working.length ? '正在工作' : uncertain ? '状态待确认' : '正在待命';
+  const staticSnapshot = readOnly && externalSnapshot === undefined && externalHealthy === undefined;
+  const title = offline ? '连接待恢复' : waiting ? '等你点个头' : working.length ? '正在工作'
+    : recentlyWaiting ? '最近有待响应' : recentlyWorking ? '最近有任务运行' : '正在待命';
   const priority = (state: string) => state === 'WAITING_APPROVAL' ? 0 : state === 'WORKING' ? 1 : 2;
-  const sessions = [...data.sessions].sort((a, b) => priority(a.state) - priority(b.state) || b.lastEventAt.localeCompare(a.lastEventAt));
+  const sessions = [...activeSessions].sort((a, b) => priority(a.state) - priority(b.state) || b.lastEventAt.localeCompare(a.lastEventAt));
   const listedSessions = sessions.slice(0, 12);
   const accountPages = Math.max(1, Math.ceil(data.accounts.length / 3));
   const sessionPages = Math.max(1, Math.ceil(listedSessions.length / 6));
@@ -129,7 +133,8 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
         </section> : <>
           <section className={styles.hero} aria-label="任务总状态">
             <PixelRobot /><h2>{title}</h2>
-            <span className={styles.summary}>{offline ? '显示最近快照' : waiting ? `${waiting} 个任务待审批` : working.length ? `${working.length} 个任务执行中` : uncertain ? `${uncertain} 个状态待确认` : '等待新的任务'}</span>
+            <span className={styles.summary}>{offline ? '显示最近快照' : waiting ? `${waiting} 个任务待审批` : working.length ? `${working.length} 个任务执行中`
+              : recentlyWaiting ? `${recentlyWaiting} 个任务最近等待响应` : recentlyWorking ? `${recentlyWorking} 个任务最近执行中` : '等待新的任务'}</span>
             {working.length && !offline ? <time className={styles.timer} title="当前执行中任务的最长持续时间">{durationText(longestStart, now)}</time> : null}
           </section>
           <section className={styles.quota} aria-labelledby="quota-heading">
@@ -167,12 +172,12 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
                 </li>;
               })}
             </ul>
-            {!sessions.length ? <p className={styles.empty}>暂无会话事件</p> : null}
+            {!sessions.length ? <p className={styles.empty}>暂无运行中或待你响应的会话</p> : null}
           </section>
         </>}
         <footer className={styles.footer}>
           <button title="查看设备状态" aria-label="查看设备状态" onClick={event => open({ kind: 'devices' }, event.currentTarget)}>■ {online}/{data.devices.length} 在线{data.devices.length > online ? ` · ${data.devices.length - online} 未在线` : ''}</button>
-          <span title={`快照时间：${data.generatedAt}`}>{`${syncHealthy ? '' : '中断 · '}${ageText(data.generatedAt, now)}同步`}</span>
+          <span title={`快照时间：${data.generatedAt}`}>{staticSnapshot ? '静态快照' : syncHealthy ? syncCountdownText(data.generatedAt, now) : '同步中断'}</span>
         </footer>
       </div>
     </div>

@@ -272,7 +272,7 @@
 .symbol { width: 8px; flex: 0 0 8px; color: var(--accent); font-size: 12px; text-align: center; }
 .attention .symbol,
 .attention .badge { color: #efc57d; }
-.sessionName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sessionName { max-width: 145px; min-width: 0; flex: 0 1 145px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project { min-width: 0; flex: 1 1 auto; overflow: hidden; color: #71897f; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .badge { flex: 0 0 auto; overflow: hidden; color: #96aa9a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .footer {

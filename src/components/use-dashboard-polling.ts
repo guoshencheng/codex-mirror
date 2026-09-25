@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardDto } from '../contracts/dashboard';
+import { DASHBOARD_POLL_INTERVAL_MS } from './pixel-dashboard-model';
 
 const EMPTY_DASHBOARD: DashboardDto = {
   generatedAt: new Date(0).toISOString(),
@@ -9,7 +10,6 @@ const EMPTY_DASHBOARD: DashboardDto = {
   sessions: [],
   accounts: [],
 };
-const DASHBOARD_POLL_INTERVAL_MS = 10_000;
 const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
 
 export interface DashboardPollingOptions {
