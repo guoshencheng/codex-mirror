@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { DashboardDto } from '../contracts/dashboard';
 import QuotaCard from './quota-card';
 import PixelQuotaRow from './pixel-quota-row';
-import { ageText, durationText, harnessLabel, isCurrentSession, sessionLabels } from './pixel-dashboard-model';
+import { ageText, durationText, harnessLabel, isCurrentSession, sessionLabels, syncCountdownText } from './pixel-dashboard-model';
 import { useDashboardPolling } from './use-dashboard-polling';
 import styles from './pixel-dashboard.module.css';
 
