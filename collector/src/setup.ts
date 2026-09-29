@@ -377,7 +377,10 @@ export function findCodexCommand(
   ? [requested]
   : [
     ...(path ?? '').split(delimiter).filter(Boolean).map(part => join(part, 'codex')),
-    ...(platform === 'darwin' ? ['/Applications/ChatGPT.app/Contents/Resources/codex'] : []),
+    ...(platform === 'darwin' ? [
+      '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex',
+      '/Applications/ChatGPT.app/Contents/Resources/codex',
+    ] : []),
    ];
  return candidates.find(candidate => isAbsolute(candidate) && isExecutable(candidate));
 }

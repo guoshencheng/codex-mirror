@@ -190,8 +190,10 @@ it('preserves configured proxy settings for the background service', () => {
  expect(serviceDefinition('linux',paths,proxy)).toContain('Environment="HTTPS_PROXY=http://127.0.0.1:7897"');
 });
 it('finds the Codex binary bundled in the macOS ChatGPT app when PATH has none', () => {
- const bundled='/Applications/ChatGPT.app/Contents/Resources/codex';
+ const bundled='/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
  expect(findCodexCommand('darwin','/opt/homebrew/bin',undefined,candidate=>candidate===bundled)).toBe(bundled);
+ const legacy='/Applications/ChatGPT.app/Contents/Resources/codex';
+ expect(findCodexCommand('darwin','/opt/homebrew/bin',undefined,candidate=>candidate===legacy)).toBe(legacy);
 });
 it('restores the previous service file when activation fails', async () => {
  const root=await mkdtemp(join(tmpdir(),'collector-setup-')); dirs.push(root);
