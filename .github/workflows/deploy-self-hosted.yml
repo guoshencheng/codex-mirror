@@ -122,12 +122,9 @@ jobs:
           # .next、dist-display 与 collector 包都来自发布包。
           # 依赖树由发布包里的 package-lock.json 决定,与 GitHub 上 npm ci 的结果一致;
           # npm 经 mihomo 代理出站,用内存上限把 OOM 风险挡在激活之前(该机无 swap)。
+          SEED="/opt/codex-status-dashboard/pm2-releases/.seed"
+          if test -e "$SEED"; then rm -rf -- "$SEED"; fi
           AVAILABLE_KB=$(df -Pk /opt | awk 'NR == 2 { print $4 }')
-          printf 'Self-hosted /opt available: %s KB\n' "$AVAILABLE_KB"
-          printf 'Self-hosted release entries:\n'
-          find /opt/codex-status-dashboard/pm2-releases -mindepth 1 -maxdepth 1 -printf '%f\n' | sort
-          if test -e "$TARGET"; then printf 'Release target already exists: %s\n' "$TARGET"; fi
-          if test -e "$STAGING"; then printf 'Release staging path already exists: %s\n' "$STAGING"; fi
           test "$AVAILABLE_KB" -ge 3145728
           cd "$STAGING"
           PATH="/opt/node-v24.21.0-linux-x64/bin:$PATH" \
