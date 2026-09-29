@@ -7,7 +7,7 @@ import { useDisplaySnapshot } from './api';
 import '../../src/app/globals.css';
 import './style.css';
 
-const DEFAULT_ORIGIN = 'https://codex-status.shemu.top';
+const DEFAULT_ORIGIN = 'https://codex-status.icerock.top';
 const EMPTY: DashboardDto = { generatedAt: new Date(0).toISOString(), devices: [], sessions: [], accounts: [] };
 
 function savedToken(): string | null {

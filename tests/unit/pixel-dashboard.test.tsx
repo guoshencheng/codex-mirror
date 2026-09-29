@@ -95,7 +95,7 @@ describe('compact pixel dashboard', () => {
       { kind: 'quota-window', key: 'extra', label: 'Additional', usedPercent: 10, windowDurationSeconds: null, resetsAt: null },
     ]; snapshot.accounts = [wallet];
     render(<Dashboard initial={snapshot} />);
-    fireEvent.click(screen.getByRole('button', { name: '查看 Wallet account 额度详情' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看 Wallet account 额度详情与历史' }));
     expect(screen.getByText('0.00000001', { exact: true })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Additional' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刷新额度' })).not.toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('compact pixel dashboard', () => {
     }));
     render(<Dashboard initial={snapshot} readOnly historyLoader={historyLoader} />);
     expect(historyLoader).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '查看 OpenAI account 额度详情' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看 OpenAI account 额度详情与历史' }));
     await waitFor(() => expect(historyLoader).toHaveBeenCalledWith('OpenAI', '24h', expect.any(AbortSignal)));
     expect(screen.queryByRole('button', { name: '刷新额度' })).not.toBeInTheDocument();
     expect(screen.getByText('72')).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe('compact pixel dashboard', () => {
 
   it('labels a read-only static preview without making a history request', () => {
     render(<Dashboard initial={data()} readOnly />);
-    fireEvent.click(screen.getByRole('button', { name: '查看 OpenAI account 额度详情' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看 OpenAI account 额度详情与历史' }));
     expect(screen.getByText('静态预览不提供额度历史')).toBeInTheDocument();
   });
 });
