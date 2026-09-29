@@ -21,9 +21,16 @@ Web/API 与 worker 以 PM2 进程运行在服务器(tt,180.184.45.232)宿主机�
 
 ## CI 部署(日常更新唯一入口)
 
-工作流 `.github/workflows/deploy-self-hosted.yml`,在 GitHub 页面手动触发(`workflow_dispatch`,仅 main):安装依赖 → 单测 + typecheck → `next build`(含 collector 打包)→ display 构建 → 打不含 node_modules 的 tar 包 → scp 到服务器 → 指纹比对决定复用或 `npm ci` 安装依赖(经 mihomo 代理 `http://172.22.0.1:7890`)→ 激活 → 校验公网 `/api/health` 与 `/display/`。
+工作流 `.github/workflows/deploy-self-hosted.yml`,在 GitHub 页面手动触发(Actions → "Build and deploy self-hosted dashboard" → Run workflow,仅 main)。每次部署的完整流程:
 
-依赖复用规则:`package-lock.json` 与当前 active release(或种子目录)一致时直接 `cp -a` 旧 node_modules;不一致才在服务器 `npm ci`。部署所需秘密:GitHub secret `CODEX_TT_DEPLOY_KEY`(部署 SSH 私钥),host key 固定在仓库 `deploy/tt-known_hosts`。
+1. **CI 构建**(GitHub runner,Node 24.21.0 x86_64):`npm ci` → 单测 + typecheck → `npm run build`(prebuild 自动产出 `public/collector/` 采集器安装包)→ `npm run display:build`。
+2. **打包**:整个仓库打成 `codex-dashboard-release.tar.gz`,排除 `node_modules`、`.next/cache`、`tests`、`docs` 等;断言 `.next/BUILD_ID`、`public/collector/collector.tar.gz`、`dist-display/index.html` 在包内;生成 sha256。
+3. **上传**:经部署密钥 SSH/SCP 到服务器 `/var/tmp/codex-status-deploy/<release-id>/`。
+4. **服务器侧安装依赖**:校验 sha256 后解包到 `pm2-releases/<release-id>.extracting`,然后**每次都在服务器完整执行 `npm ci`(经 mihomo 代理 `http://172.22.0.1:7890`,带内存上限),不复用旧 node_modules、不做指纹对比**;依赖树由包内 `package-lock.json` 决定,与 CI 上的安装结果一致。服务器只装依赖,不构建。
+5. **激活**:原子 `mv` 成正式 release 目录,执行 `deploy/self-hosted/activate.mjs`——起边缘容器 → 跑数据库迁移 → 重写 PM2 ecosystem → `pm2 startOrReload` + `pm2 save` → 等 `/api/health` 与 display 健康;任一失败则非零退出,线上旧进程不受影响。
+6. **公网校验**:CI 最后确认 `https://codex-status.shemu.top/api/health` 与 `/display/` 均 200。
+
+部署所需秘密:GitHub secret `CODEX_TT_DEPLOY_KEY`(部署 SSH 私钥),host key 固定在仓库 `deploy/tt-known_hosts`。
 
 ## 1Panel 站点与证书
 
@@ -96,6 +103,6 @@ npm run providers:probe -- --provider codex
 
 1. 安装 Node 24 到 `/opt/node-v24.21.0-linux-x64`;全局安装(经代理)`@openai/codex@0.146.0`、`@moonshot-ai/kimi-code@2.0.2` 及 linux-x64 平台包,并生成 `/usr/local/bin/kimi-runtime`(`KIMI_CODE_NO_AUTO_UPDATE=1` 包装)——对齐 `deploy/Dockerfile.provider-runtime`。
 2. 从旧 worker 容器/卷迁移 `runtime-auth` 到 `/opt/codex-status-dashboard/runtime-auth/`(0700)。
-3. 从旧 web 容器拷出 node_modules 作依赖种子 `/opt/codex-status-dashboard/pm2-releases/.seed/`(含其 `package-lock.json`,供指纹比对)。
+3. 从旧 web 容器拷出 node_modules 作依赖种子 `/opt/codex-status-dashboard/pm2-releases/.seed/`(首次部署曾用于复用;工作流改为每次 `npm ci` 后该目录不再使用,可删除)。
 4. 生成部署 SSH 密钥,公钥入 `authorized_keys`,私钥入 GitHub secret `CODEX_TT_DEPLOY_KEY`;`ssh-keyscan` 生成 `deploy/tt-known_hosts`。
 5. 用 `deploy/compose.self-hosted-edge.yaml` 重建 db(新增 127.0.0.1:5432 映射)与 display 容器,确认数据正常后停止旧 web/worker 容器(保留不删)。

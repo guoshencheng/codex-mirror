@@ -75,3 +75,7 @@ worker 无法直连 OpenAI 时，在 `private/.env` 设 `WORKER_PROXY=http://<ho
 - 新增账号：换 accountId 重复"手动注入"流程。
 - 看板出现 `AUTH_EXPIRED`(refresh_token 失效）：对该账号重新手动登录并替换 `runtime-auth` 目录内的 auth.json，注册条目不动。
 - 不要把开发机的 `~/.codex` 复制进部署；每个账号用设备码独立授权。
+
+## 部署
+
+自托管部署（codex-status.shemu.top）的完整流程、架构、日常命令与回退见 [docs/self-hosted-deployment.md](docs/self-hosted-deployment.md)。日常更新唯一入口是 GitHub Actions 手动触发 `Build and deploy self-hosted dashboard`（仅 main):CI 构建打包（不含 node_modules)→ 服务器侧每次完整 `npm ci` 安装依赖（经 mihomo 代理，不做指纹复用）→ PM2 激活 → 公网校验。Vercel 历史部署见 [docs/deployment.md](docs/deployment.md)。

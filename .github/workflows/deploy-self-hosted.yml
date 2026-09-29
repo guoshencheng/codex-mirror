@@ -94,46 +94,17 @@ jobs:
           chmod 600 "$HOME/.ssh/tt-deploy"
           ssh-keygen -y -f "$HOME/.ssh/tt-deploy" > /dev/null
 
-      - name: Check whether tt can reuse matching dependencies
-        run: |
-          set -euo pipefail
-          SSH=(ssh -i "$HOME/.ssh/tt-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/tt-known_hosts")
-          LOCAL_FINGERPRINT=$(sha256sum package-lock.json | cut -d ' ' -f 1)
-          REMOTE_FINGERPRINT=$("${SSH[@]}" root@180.184.45.232 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          DONOR=''
-          if [[ -f /etc/codex-status-dashboard/ecosystem.config.cjs ]]; then
-            DONOR=$(/opt/node-v24.21.0-linux-x64/bin/node -p "try { require('/etc/codex-status-dashboard/ecosystem.config.cjs').apps[0].cwd } catch { '' }")
-          fi
-          if [[ -z "$DONOR" || ! -f "$DONOR/package-lock.json" ]]; then
-            DONOR=/opt/codex-status-dashboard/pm2-releases/.seed
-          fi
-          if [[ -f "$DONOR/package-lock.json" ]]; then
-            sha256sum "$DONOR/package-lock.json" | cut -d ' ' -f 1
-          fi
-          REMOTE
-          )
-          if [[ -n "$REMOTE_FINGERPRINT" && "$LOCAL_FINGERPRINT" = "$REMOTE_FINGERPRINT" ]]; then
-            echo 'DEPENDENCY_MODE=reuse' >> "$GITHUB_ENV"
-            echo 'Runtime dependencies match; tt will copy the donor release dependencies.'
-          else
-            echo 'DEPENDENCY_MODE=install' >> "$GITHUB_ENV"
-            echo 'Runtime dependencies changed; tt will run npm ci itself (no build on tt).'
-          fi
-
-      - name: Upload release, prepare dependencies and activate on tt
+      - name: Upload release, install dependencies and activate on tt
         run: |
           set -euo pipefail
           SSH=(ssh -i "$HOME/.ssh/tt-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/tt-known_hosts")
           SCP=(scp -i "$HOME/.ssh/tt-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/tt-known_hosts")
           "${SSH[@]}" root@180.184.45.232 "install -m 700 -d /var/tmp/codex-status-deploy/$RELEASE_ID"
           "${SCP[@]}" "$ARCHIVE" "$ARCHIVE.sha256" "root@180.184.45.232:/var/tmp/codex-status-deploy/$RELEASE_ID/"
-          "${SSH[@]}" root@180.184.45.232 "bash -s -- '$RELEASE_ID' '$DEPENDENCY_MODE'" <<'REMOTE'
+          "${SSH[@]}" root@180.184.45.232 "bash -s -- '$RELEASE_ID'" <<'REMOTE'
           set -euo pipefail
           RELEASE_ID="$1"
-          DEPENDENCY_MODE="$2"
           [[ "$RELEASE_ID" =~ ^[a-f0-9]{12}-run[0-9]+-a[0-9]+$ ]]
-          [[ "$DEPENDENCY_MODE" = reuse || "$DEPENDENCY_MODE" = install ]]
           INBOX="/var/tmp/codex-status-deploy/$RELEASE_ID"
           TARGET="/opt/codex-status-dashboard/pm2-releases/$RELEASE_ID"
           STAGING="$TARGET.extracting"
@@ -147,31 +118,18 @@ jobs:
           test -s "$STAGING/.next/BUILD_ID"
           test -s "$STAGING/public/collector/collector.tar.gz"
           test -s "$STAGING/dist-display/index.html"
-          if [[ "$DEPENDENCY_MODE" = reuse ]]; then
-            DONOR=''
-            if [[ -f /etc/codex-status-dashboard/ecosystem.config.cjs ]]; then
-              DONOR=$(/opt/node-v24.21.0-linux-x64/bin/node -p "try { require('/etc/codex-status-dashboard/ecosystem.config.cjs').apps[0].cwd } catch { '' }")
-            fi
-            if [[ -z "$DONOR" || ! -d "$DONOR/node_modules" ]]; then
-              DONOR=/opt/codex-status-dashboard/pm2-releases/.seed
-            fi
-            NEW_FINGERPRINT=$(sha256sum "$STAGING/package-lock.json" | cut -d ' ' -f 1)
-            OLD_FINGERPRINT=$(sha256sum "$DONOR/package-lock.json" | cut -d ' ' -f 1)
-            test "$OLD_FINGERPRINT" = "$NEW_FINGERPRINT"
-            cp -a "$DONOR/node_modules" "$STAGING/node_modules"
-          else
-            # tt 只装依赖,不构建;.next、dist-display 与 collector 包都来自发布包。
-            # 依赖树由发布包里的 package-lock.json 决定,与 GitHub 上 npm ci 的结果一致;
-            # npm 经 mihomo 代理出站,用内存上限把 OOM 风险挡在激活之前(该机无 swap)。
-            AVAILABLE_KB=$(df -Pk /opt | awk 'NR == 2 { print $4 }')
-            test "$AVAILABLE_KB" -ge 3145728
-            cd "$STAGING"
-            PATH="/opt/node-v24.21.0-linux-x64/bin:$PATH" \
-              NODE_OPTIONS=--max-old-space-size=1024 \
-              https_proxy=http://172.22.0.1:7890 \
-              http_proxy=http://172.22.0.1:7890 \
-              nice -n 10 npm ci --no-audit --no-fund
-          fi
+          # tt 每次部署都完整安装依赖,不构建、不复用旧 node_modules;
+          # .next、dist-display 与 collector 包都来自发布包。
+          # 依赖树由发布包里的 package-lock.json 决定,与 GitHub 上 npm ci 的结果一致;
+          # npm 经 mihomo 代理出站,用内存上限把 OOM 风险挡在激活之前(该机无 swap)。
+          AVAILABLE_KB=$(df -Pk /opt | awk 'NR == 2 { print $4 }')
+          test "$AVAILABLE_KB" -ge 3145728
+          cd "$STAGING"
+          PATH="/opt/node-v24.21.0-linux-x64/bin:$PATH" \
+            NODE_OPTIONS=--max-old-space-size=1024 \
+            https_proxy=http://172.22.0.1:7890 \
+            http_proxy=http://172.22.0.1:7890 \
+            nice -n 10 npm ci --no-audit --no-fund
           test -e "$STAGING/node_modules/.bin/next"
           test -e "$STAGING/node_modules/.bin/tsx"
           mv "$STAGING" "$TARGET"
