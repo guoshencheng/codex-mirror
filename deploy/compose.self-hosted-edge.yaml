@@ -1,0 +1,46 @@
+name: codex-status-dashboard
+
+# Edge services for the PM2 deployment: PostgreSQL and the display nginx stay
+# containerized (no image builds on this host); web and worker run under PM2.
+# display serves the CI-built static bundle bind-mounted from the active
+# release, selected by DISPLAY_RELEASE in private/compose-edge.env.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codex_status_dashboard
+      POSTGRES_USER: dashboard
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    volumes:
+      - database:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dashboard -d codex_status_dashboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  display:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ${DISPLAY_RELEASE:?Set DISPLAY_RELEASE}/dist-display
+        target: /usr/share/nginx/html/display
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DISPLAY_RELEASE}/deploy/display.nginx.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:3101:80"
+
+volumes:
+  database:

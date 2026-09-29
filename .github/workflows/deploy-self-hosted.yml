@@ -1,0 +1,195 @@
+name: Build and deploy self-hosted dashboard
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main
+
+      - name: Check out release commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24.21.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Verify Linux release architecture
+        run: |
+          test "$(uname -m)" = x86_64
+          test "$(node --version)" = v24.21.0
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test and typecheck
+        run: |
+          npm test
+          npm run typecheck
+
+      - name: Build web and collector package
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: |
+          npm run build
+          npm run display:build
+
+      - name: Package prebuilt app
+        run: |
+          set -euo pipefail
+          RELEASE_ID="${GITHUB_SHA:0:12}-run${GITHUB_RUN_ID}-a${GITHUB_RUN_ATTEMPT}"
+          ARCHIVE="$RUNNER_TEMP/codex-dashboard-release.tar.gz"
+          test -s .next/BUILD_ID
+          test -s public/collector/collector.tar.gz
+          test -s public/collector/collector.sha256
+          test -s dist-display/index.html
+          test -f deploy/self-hosted/activate.mjs
+          tar \
+            --exclude='./node_modules' \
+            --exclude='./.next/cache' \
+            --exclude='./.git' \
+            --exclude='./.worktrees' \
+            --exclude='./tests' \
+            --exclude='./docs' \
+            --exclude='./.agents' \
+            --exclude='./.superpowers' \
+            --exclude='./dist' \
+            -czf "$ARCHIVE" .
+          tar -tzf "$ARCHIVE" > "$RUNNER_TEMP/release-files.txt"
+          grep -Fxq './.next/BUILD_ID' "$RUNNER_TEMP/release-files.txt"
+          grep -Fxq './public/collector/collector.tar.gz' "$RUNNER_TEMP/release-files.txt"
+          grep -Fxq './public/collector/collector.sha256' "$RUNNER_TEMP/release-files.txt"
+          grep -Fxq './dist-display/index.html' "$RUNNER_TEMP/release-files.txt"
+          grep -Fxq './deploy/self-hosted/activate.mjs' "$RUNNER_TEMP/release-files.txt"
+          (cd "$RUNNER_TEMP" && sha256sum codex-dashboard-release.tar.gz > codex-dashboard-release.tar.gz.sha256)
+          echo "RELEASE_ID=$RELEASE_ID" >> "$GITHUB_ENV"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          du -h "$ARCHIVE"
+
+      - name: Configure SSH for tt
+        env:
+          DEPLOY_KEY: ${{ secrets.CODEX_TT_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/tt-deploy"
+          chmod 600 "$HOME/.ssh/tt-deploy"
+          ssh-keygen -y -f "$HOME/.ssh/tt-deploy" > /dev/null
+
+      - name: Check whether tt can reuse matching dependencies
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/tt-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/tt-known_hosts")
+          LOCAL_FINGERPRINT=$(sha256sum package-lock.json | cut -d ' ' -f 1)
+          REMOTE_FINGERPRINT=$("${SSH[@]}" root@180.184.45.232 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          DONOR=''
+          if [[ -f /etc/codex-status-dashboard/ecosystem.config.cjs ]]; then
+            DONOR=$(/opt/node-v24.21.0-linux-x64/bin/node -p "try { require('/etc/codex-status-dashboard/ecosystem.config.cjs').apps[0].cwd } catch { '' }")
+          fi
+          if [[ -z "$DONOR" || ! -f "$DONOR/package-lock.json" ]]; then
+            DONOR=/opt/codex-status-dashboard/pm2-releases/.seed
+          fi
+          if [[ -f "$DONOR/package-lock.json" ]]; then
+            sha256sum "$DONOR/package-lock.json" | cut -d ' ' -f 1
+          fi
+          REMOTE
+          )
+          if [[ -n "$REMOTE_FINGERPRINT" && "$LOCAL_FINGERPRINT" = "$REMOTE_FINGERPRINT" ]]; then
+            echo 'DEPENDENCY_MODE=reuse' >> "$GITHUB_ENV"
+            echo 'Runtime dependencies match; tt will copy the donor release dependencies.'
+          else
+            echo 'DEPENDENCY_MODE=install' >> "$GITHUB_ENV"
+            echo 'Runtime dependencies changed; tt will run npm ci itself (no build on tt).'
+          fi
+
+      - name: Upload release, prepare dependencies and activate on tt
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/tt-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/tt-known_hosts")
+          SCP=(scp -i "$HOME/.ssh/tt-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/tt-known_hosts")
+          "${SSH[@]}" root@180.184.45.232 "install -m 700 -d /var/tmp/codex-status-deploy/$RELEASE_ID"
+          "${SCP[@]}" "$ARCHIVE" "$ARCHIVE.sha256" "root@180.184.45.232:/var/tmp/codex-status-deploy/$RELEASE_ID/"
+          "${SSH[@]}" root@180.184.45.232 "bash -s -- '$RELEASE_ID' '$DEPENDENCY_MODE'" <<'REMOTE'
+          set -euo pipefail
+          RELEASE_ID="$1"
+          DEPENDENCY_MODE="$2"
+          [[ "$RELEASE_ID" =~ ^[a-f0-9]{12}-run[0-9]+-a[0-9]+$ ]]
+          [[ "$DEPENDENCY_MODE" = reuse || "$DEPENDENCY_MODE" = install ]]
+          INBOX="/var/tmp/codex-status-deploy/$RELEASE_ID"
+          TARGET="/opt/codex-status-dashboard/pm2-releases/$RELEASE_ID"
+          STAGING="$TARGET.extracting"
+          cd "$INBOX"
+          sha256sum -c codex-dashboard-release.tar.gz.sha256
+          test ! -e "$TARGET"
+          test ! -e "$STAGING"
+          mkdir "$STAGING"
+          trap 'rm -rf -- "$STAGING"' EXIT
+          tar --no-same-owner -xzf codex-dashboard-release.tar.gz -C "$STAGING"
+          test -s "$STAGING/.next/BUILD_ID"
+          test -s "$STAGING/public/collector/collector.tar.gz"
+          test -s "$STAGING/dist-display/index.html"
+          if [[ "$DEPENDENCY_MODE" = reuse ]]; then
+            DONOR=''
+            if [[ -f /etc/codex-status-dashboard/ecosystem.config.cjs ]]; then
+              DONOR=$(/opt/node-v24.21.0-linux-x64/bin/node -p "try { require('/etc/codex-status-dashboard/ecosystem.config.cjs').apps[0].cwd } catch { '' }")
+            fi
+            if [[ -z "$DONOR" || ! -d "$DONOR/node_modules" ]]; then
+              DONOR=/opt/codex-status-dashboard/pm2-releases/.seed
+            fi
+            NEW_FINGERPRINT=$(sha256sum "$STAGING/package-lock.json" | cut -d ' ' -f 1)
+            OLD_FINGERPRINT=$(sha256sum "$DONOR/package-lock.json" | cut -d ' ' -f 1)
+            test "$OLD_FINGERPRINT" = "$NEW_FINGERPRINT"
+            cp -a "$DONOR/node_modules" "$STAGING/node_modules"
+          else
+            # tt 只装依赖,不构建;.next、dist-display 与 collector 包都来自发布包。
+            # 依赖树由发布包里的 package-lock.json 决定,与 GitHub 上 npm ci 的结果一致;
+            # npm 经 mihomo 代理出站,用内存上限把 OOM 风险挡在激活之前(该机无 swap)。
+            AVAILABLE_KB=$(df -Pk /opt | awk 'NR == 2 { print $4 }')
+            test "$AVAILABLE_KB" -ge 3145728
+            cd "$STAGING"
+            PATH="/opt/node-v24.21.0-linux-x64/bin:$PATH" \
+              NODE_OPTIONS=--max-old-space-size=1024 \
+              https_proxy=http://172.22.0.1:7890 \
+              http_proxy=http://172.22.0.1:7890 \
+              nice -n 10 npm ci --no-audit --no-fund
+          fi
+          test -e "$STAGING/node_modules/.bin/next"
+          test -e "$STAGING/node_modules/.bin/tsx"
+          mv "$STAGING" "$TARGET"
+          trap - EXIT
+          /opt/node-v24.21.0-linux-x64/bin/node "$TARGET/deploy/self-hosted/activate.mjs" "$TARGET"
+          REMOTE
+
+      - name: Verify public ingress
+        run: |
+          set -euo pipefail
+          test "$(curl --retry 5 --retry-delay 2 --retry-all-errors --max-time 30 -sS -o /dev/null -w '%{http_code}' https://codex-status.shemu.top/api/health)" = 200
+          test "$(curl --retry 5 --retry-delay 2 --retry-all-errors --max-time 30 -sS -o /dev/null -w '%{http_code}' https://codex-status.shemu.top/display/)" = 200
+
+      - name: Record release
+        run: |
+          {
+            echo '### Self-hosted release on tt'
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Release: /opt/codex-status-dashboard/pm2-releases/$RELEASE_ID"
+            echo '- Migrate, web, worker verified by the server-side activation script.'
+          } >> "$GITHUB_STEP_SUMMARY"

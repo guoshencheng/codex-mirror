@@ -14,7 +14,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 一个 Codex 账号 = 一个运行时目录 + 一条注册记录。
 
-- 目录：`$CODEX_RUNTIME_ROOT/<accountId>/`(compose 中 `CODEX_RUNTIME_ROOT=/var/lib/dashboard-auth/codex`，即 `runtime-auth` named volume)。`accountId` 只允许 `[a-zA-Z0-9_-]{1,64}`，路径校验见 `src/server/providers/bootstrap.ts` 的 `accountRuntimeHome()`。
+- 目录：`$CODEX_RUNTIME_ROOT/<accountId>/`(自托管 PM2 部署中为 `/opt/codex-status-dashboard/runtime-auth/codex`)。`accountId` 只允许 `[a-zA-Z0-9_-]{1,64}`，路径校验见 `src/server/providers/bootstrap.ts` 的 `accountRuntimeHome()`。
 - 目录内唯一必需的凭据是 `auth.json`(codex CLI 的登录产物）:
 
 ```json
@@ -23,7 +23,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   "last_refresh": "..." }
 ```
 
-- OAuth 令牌只存于该 volume；数据库和网页不保存令牌，数据库只存账号注册信息和额度快照。
+- OAuth 令牌只存于该目录；数据库和网页不保存令牌，数据库只存账号注册信息和额度快照。
 
 ## 额度读取链路
 
@@ -31,14 +31,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 2. `bootstrap.ts` 按账号 id 算出目录并 `mkdir 0700`，构造 `CodexUsageApi(home)`(`src/server/providers/codex/usage-api.ts`)。
 3. `CodexUsageApi` 读 `<home>/auth.json`，取 `tokens.access_token` / `tokens.account_id`，请求 `GET https://chatgpt.com/backend-api/wham/usage`，请求头：`Authorization: Bearer <access_token>`、`ChatGPT-Account-Id: <account_id>`。
 4. 响应 `rate_limit.primary_window` / `secondary_window`（字段 `used_percent`、`limit_window_seconds`、`reset_at`，reset_at 可能是 Unix 秒或 ISO 字符串）被归一化为 `normalizeCodex()` 期望的 `{ rateLimits: { primary, secondary } }` 形状（`windowDurationMins = limit_window_seconds / 60`)。
-5. 401 时用 `tokens.refresh_token` 刷新：`POST https://auth.openai.com/oauth/token`,`application/x-www-form-urlencoded`,字段 `client_id=app_EMoamEEZ73f0CkXaXp7hrann`、`grant_type=refresh_token`、`refresh_token`；成功后把新令牌**原子写回 auth.json**（临时文件 + rename,0600）并重试一次。因此 auth.json 对容器内 `node` 用户（uid/gid 1000）必须可写。
+5. 401 时用 `tokens.refresh_token` 刷新：`POST https://auth.openai.com/oauth/token`,`application/x-www-form-urlencoded`,字段 `client_id=app_EMoamEEZ73f0CkXaXp7hrann`、`grant_type=refresh_token`、`refresh_token`；成功后把新令牌**原子写回 auth.json**（临时文件 + rename,0600）并重试一次。因此 auth.json 对运行 worker 的用户（自托管 PM2 部署中为 root）必须可写。
 6. 失败语义：缺文件/缺字段/刷新被拒 → `AUTH_EXPIRED`（需重新登录）;403 → `FORBIDDEN`;429 → `RATE_LIMITED`（带 retryAfter)；超时 → `TIMEOUT`；响应结构变化 → `SCHEMA_CHANGED`。
 
 注意：额度读取**不再 spawn `codex app-server`**（旧的 `codex/rpc.ts` 已删除）。网页设备码登录流程仍用 `login-rpc.ts` 的 app-server 路径，不要混淆两者。
 
 ## 注册账号
 
-- 文件配置（自托管主推）:`private/provider-accounts.json`（只读 bind 挂载到 worker 的 `/run/config/`）加一条，改完**重启 worker** 生效：
+- 文件配置（自托管主推）:`/opt/codex-status-dashboard/private/provider-accounts.json`(PM2 worker 经 `PROVIDER_ACCOUNTS_FILE` 读取）加一条，改完 `pm2 restart dashboard-worker` 生效：
 
 ```json
 { "id": "codex-personal", "providerId": "codex", "label": "Codex (ChatGPT)",
@@ -57,22 +57,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 mkdir -p /tmp/codex-auth/<accountId>
 CODEX_HOME=/tmp/codex-auth/<accountId> HOME=/tmp/codex-auth/<accountId> codex login --device-auth
 
-# 2. 放入 runtime-auth 卷(卷名以 docker volume inspect 为准)
-V=/var/lib/docker/volumes/<project>_runtime-auth/_data
+# 2. 放入宿主机的 runtime-auth 目录(PM2 worker 以 root 运行)
+V=/opt/codex-status-dashboard/runtime-auth
 mkdir -p $V/codex/<accountId>
 cp /tmp/codex-auth/<accountId>/auth.json $V/codex/<accountId>/
 chmod 700 $V/codex/<accountId> && chmod 600 $V/codex/<accountId>/auth.json
-chown -R 1000:1000 $V/codex/<accountId>   # 容器内 node 用户
 
-# 3. provider-accounts.json 加条目,重启 worker;删除 /tmp/codex-auth
+# 3. provider-accounts.json 加条目,pm2 restart dashboard-worker;删除 /tmp/codex-auth
 ```
 
 ## 代理
 
-worker 无法直连 OpenAI 时，在 `private/.env` 设 `WORKER_PROXY=http://<host>:<port>`（可选 `WORKER_NO_PROXY`，默认 `localhost,127.0.0.1,db`)。compose 会给 worker 注入 `NODE_USE_ENV_PROXY=1` 和 `HTTP(S)_PROXY/ALL_PROXY/NO_PROXY`,Node 24 的全局 fetch 自动走代理。容器内 `127.0.0.1` 指容器自身：代理在宿主机上时应让代理监听 docker 网桥地址（如 mihomo `allow-lan: true` + `bind-address: <bridge-gateway>`)，`WORKER_PROXY` 填该地址。
+worker 无法直连 OpenAI 时，在 `private/.env` 设 `WORKER_PROXY=http://<host>:<port>`（可选 `WORKER_NO_PROXY`，默认 `localhost,127.0.0.1`)。激活脚本会给 PM2 worker 注入 `NODE_USE_ENV_PROXY=1` 和 `HTTP(S)_PROXY/ALL_PROXY/NO_PROXY`,Node 24 的全局 fetch 自动走代理；改完 `pm2 restart dashboard-worker` 生效。当前部署的代理是宿主机 mihomo 监听的 `http://172.22.0.1:7890`。
 
 ## 维护
 
 - 新增账号：换 accountId 重复"手动注入"流程。
-- 看板出现 `AUTH_EXPIRED`(refresh_token 失效）：对该账号重新手动登录并替换卷内 auth.json，注册条目不动。
+- 看板出现 `AUTH_EXPIRED`(refresh_token 失效）：对该账号重新手动登录并替换 `runtime-auth` 目录内的 auth.json，注册条目不动。
 - 不要把开发机的 `~/.codex` 复制进部署；每个账号用设备码独立授权。
