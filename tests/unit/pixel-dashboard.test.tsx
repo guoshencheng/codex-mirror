@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '../../src/components/dashboard';
 import type { DashboardAccount, DashboardDto, DashboardSession } from '../../src/contracts/dashboard';
+import type { QuotaHistoryLoader } from '../../src/contracts/quota-history';
 
 const transport = vi.hoisted(() => ({ syncHealthy: true, refresh: vi.fn(), refreshQuota: vi.fn(), logout: vi.fn() }));
 vi.mock('../../src/components/use-dashboard-polling', () => ({
@@ -100,5 +101,26 @@ describe('compact pixel dashboard', () => {
     expect(screen.queryByRole('button', { name: '刷新额度' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '返回面板' }));
     expect(screen.getByRole('list', { name: '会话' })).toBeInTheDocument();
+  });
+
+  it('loads injected quota history only after opening details and keeps the card read-only', async () => {
+    const snapshot = data();
+    const historyLoader = vi.fn<QuotaHistoryLoader>(async () => ({
+      accountId: 'OpenAI', range: '24h', from: time, to: time, generatedAt: time, retentionDays: 90, bucketSeconds: 1800,
+      series: [{ id: 'quota', key: 'primary', label: '5H', kind: 'quota-window', unit: '%', windowDurationSeconds: 18000,
+        points: [{ observedAt: time, value: 72, resetsAt: null, breakBefore: true }] }],
+    }));
+    render(<Dashboard initial={snapshot} readOnly historyLoader={historyLoader} />);
+    expect(historyLoader).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '查看 OpenAI account 额度详情' }));
+    await waitFor(() => expect(historyLoader).toHaveBeenCalledWith('OpenAI', '24h', expect.any(AbortSignal)));
+    expect(screen.queryByRole('button', { name: '刷新额度' })).not.toBeInTheDocument();
+    expect(screen.getByText('72')).toBeInTheDocument();
+  });
+
+  it('labels a read-only static preview without making a history request', () => {
+    render(<Dashboard initial={data()} readOnly />);
+    fireEvent.click(screen.getByRole('button', { name: '查看 OpenAI account 额度详情' }));
+    expect(screen.getByText('静态预览不提供额度历史')).toBeInTheDocument();
   });
 });

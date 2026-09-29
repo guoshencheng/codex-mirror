@@ -9,6 +9,12 @@ export interface QuotaLatestState {
   nextAttemptAt: string | null;
 }
 
+export interface QuotaHistoryRow {
+  id: string;
+  observedAt: string;
+  snapshot: ProviderSnapshot;
+}
+
 function iso(value: unknown): string | null {
   return value instanceof Date ? value.toISOString() : value == null ? null : new Date(String(value)).toISOString();
 }
@@ -57,6 +63,39 @@ export class QuotaRepository {
       errorCode: row.error_code as ProviderFailureCode | null,
       nextAttemptAt: iso(row.next_attempt_at),
     };
+  }
+
+  async readHistory(accountId: string, from: Date, to: Date): Promise<QuotaHistoryRow[] | null> {
+    const result = await this.pool.query(`
+      WITH enabled_account AS (
+        SELECT id FROM provider_accounts WHERE id = $1 AND enabled = true
+      ), ranked AS (
+        SELECT DISTINCT ON (observed_at) id, observed_at, snapshot
+        FROM quota_snapshots
+        WHERE account_id = $1
+          AND observed_at >= GREATEST($2::timestamptz, $3::timestamptz - INTERVAL '90 days')
+          AND observed_at <= $3::timestamptz
+        ORDER BY observed_at ASC, id DESC
+      )
+      SELECT a.id AS account_id, r.id, r.observed_at, r.snapshot
+      FROM enabled_account a
+      LEFT JOIN ranked r ON true
+      ORDER BY r.observed_at ASC, r.id ASC
+    `, [accountId, from, to]);
+    const rows = result.rows as Array<{
+      account_id: string | null;
+      id: string | null;
+      observed_at: Date | string | null;
+      snapshot: ProviderSnapshot | null;
+    }>;
+    if (!rows.length || rows[0]?.account_id == null) return null;
+    return rows
+      .filter(row => row.id != null && row.observed_at != null && row.snapshot != null)
+      .map(row => ({
+        id: String(row.id),
+        observedAt: iso(row.observed_at)!,
+        snapshot: row.snapshot!,
+      }));
   }
 
   async loadAccount(client: PoolClient, accountId: string): Promise<ProviderAccountConfig | null> {

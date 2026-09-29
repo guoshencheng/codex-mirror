@@ -59,6 +59,8 @@ Kindle 等不方便输入 Token 的设备,可直接打开 `https://codex-status.
 
 worker 的 Codex 额度读取直接请求 ChatGPT 用量 API(`chatgpt.com/backend-api/wham/usage`),凭据为 `runtime-auth/codex/<account-id>/auth.json`,访问令牌过期时由 worker 自行刷新。worker 经 `private/.env` 的 `WORKER_PROXY`(当前 `http://172.22.0.1:7890`,宿主机 mihomo)出站;可选 `WORKER_NO_PROXY`,默认 `localhost,127.0.0.1`。代理只作用于 worker 进程。
 
+额度历史由 worker 每次成功采集时写入 `quota_snapshots`，查询接口只开放最近 90 天；worker 每天清理 90 天前的记录。历史图在额度详情中按 24 小时、7 天、30 天、90 天查看，长范围使用采样趋势，缺失采样会显示断点。历史依赖 worker 持续运行，worker 停机期间不会生成补点；已清理或从未采集的数据无法恢复。升级时必须让迁移服务先应用 `010-quota-history-index.sql`，再启动 Web 和 worker；不需要回填历史。
+
 ### 在看板中添加 Codex 账号
 
 管理员登录后打开"设置 → 额度账号 → 添加账号 → Codex 登录",输入账号名称并开始登录。页面显示 OpenAI 官方验证网址和一次性代码;在新窗口完成 ChatGPT 授权后,worker 会读取额度并把账号加入看板。此流程使用 ChatGPT 套餐的 Codex 登录,凭据只存于 worker 的 `runtime-auth` 目录,网页和数据库不保存 OAuth 令牌。

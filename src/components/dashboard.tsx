@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DashboardDto } from '../contracts/dashboard';
+import type { QuotaHistoryLoader } from '../contracts/quota-history';
+import { createQuotaHistoryLoader } from '../lib/quota-history-client';
 import QuotaCard from './quota-card';
 import PixelQuotaRow from './pixel-quota-row';
 import { ageText, durationText, harnessLabel, isCurrentSession, sessionLabels, syncCountdownText } from './pixel-dashboard-model';
@@ -35,13 +37,18 @@ export interface DashboardProps {
   externalSnapshot?: DashboardDto | null;
   externalHealthy?: boolean;
   settingsHref?: string;
+  historyLoader?: QuotaHistoryLoader;
 }
 
-export default function Dashboard({ initial, readOnly = false, externalSnapshot, externalHealthy, settingsHref }: DashboardProps) {
+export default function Dashboard({ initial, readOnly = false, externalSnapshot, externalHealthy, settingsHref, historyLoader: suppliedHistoryLoader }: DashboardProps) {
   const polling = useDashboardPolling(initial, { readOnly });
   const data = externalSnapshot ?? polling.data;
   const syncHealthy = externalHealthy ?? polling.syncHealthy;
   const { now } = polling;
+  const historyLoader = useMemo(() => {
+    if (suppliedHistoryLoader) return suppliedHistoryLoader;
+    return readOnly ? undefined : createQuotaHistoryLoader();
+  }, [readOnly, suppliedHistoryLoader]);
   const host = useRef<HTMLElement>(null);
   const backButton = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -107,7 +114,7 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
           <button className={styles.back} aria-label="返回面板" ref={backButton} onClick={() => setDetail(null)}>‹ 返回面板</button>
           <div className={styles.detailScroll}>
             {detail.kind === 'account' ? selectedAccount
-              ? <QuotaCard account={selectedAccount} now={now} onRefresh={() => {}} readOnly /> : <p>该账号已不在当前快照中</p> : null}
+              ? <QuotaCard account={selectedAccount} now={now} onRefresh={() => {}} readOnly historyLoader={historyLoader} /> : <p>该账号已不在当前快照中</p> : null}
             {detail.kind === 'session' ? selectedSession ? <article className={styles.sessionDetail}>
               <h2>{selectedSession.title}</h2>
               <p>{isCurrentSession(selectedSession, selectedDevice, syncHealthy) ? '当前状态' : '最近状态'}：{sessionLabels[selectedSession.state]}</p>

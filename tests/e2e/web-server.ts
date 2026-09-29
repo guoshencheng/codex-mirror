@@ -43,7 +43,19 @@ async function main(): Promise<void> {
     }
     await writeFile(tokenFile, `${TEST_PASSWORD}\n`, { mode: 0o600 });
     const device = await createDevice('Playwright test device', app);
-    await writeFile(fixtureFile, JSON.stringify({ deviceId: device.id, deviceToken: device.token, epoch: randomUUID() }), { mode: 0o600 });
+    const accountId = 'e2e-history-account';
+    await app.query(`INSERT INTO provider_accounts(id, provider_id, label, credential_ref, options)
+      VALUES ($1, 'fake', 'E2E 历史账号', 'unused', '{}'::jsonb)`, [accountId]);
+    await app.query('INSERT INTO quota_refresh_status(account_id, last_attempt_at, last_success_at, next_attempt_at) VALUES ($1, now(), now(), now())', [accountId]);
+    const observedAt = (offsetMinutes: number) => new Date(Date.now() - offsetMinutes * 60_000).toISOString();
+    const snapshot = (at: string, usedPercent: number) => ({
+      accountId, providerId: 'fake', observedAt: at, serviceAvailable: true,
+      metrics: [{ kind: 'quota-window', key: 'primary', label: '5H', usedPercent, windowDurationSeconds: 18_000, resetsAt: null }],
+    });
+    const samples = [snapshot(observedAt(60), 20), snapshot(observedAt(30), 65), snapshot(observedAt(10), 5)];
+    await app.query('INSERT INTO quota_latest(account_id, snapshot) VALUES ($1, $2::jsonb)', [accountId, JSON.stringify(samples.at(-1))]);
+    for (const sample of samples) await app.query('INSERT INTO quota_snapshots(account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [accountId, sample.observedAt, JSON.stringify(sample)]);
+    await writeFile(fixtureFile, JSON.stringify({ deviceId: device.id, deviceToken: device.token, epoch: randomUUID(), accountId }), { mode: 0o600 });
 
     child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', port], {
       cwd: projectRoot,

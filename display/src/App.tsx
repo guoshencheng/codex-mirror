@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Dashboard from '../../src/components/dashboard';
 import type { DashboardDto } from '../../src/contracts/dashboard';
+import { createQuotaHistoryLoader } from '../../src/lib/quota-history-client';
 import { DISPLAY_TOKEN_PATTERN, normalizeApiOrigin } from '../../src/lib/display-connection';
 import { useDisplaySnapshot } from './api';
 import '../../src/app/globals.css';
@@ -26,6 +27,7 @@ export default function App() {
   const [origin] = useState(savedOrigin);
   const [linkError, setLinkError] = useState('');
   const { snapshot, syncHealthy, error } = useDisplaySnapshot(origin, token);
+  const historyLoader = useMemo(() => token ? createQuotaHistoryLoader({ apiOrigin: origin, token }) : undefined, [origin, token]);
 
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.hash.slice(1));
@@ -49,7 +51,7 @@ export default function App() {
   </main>;
 
   return <>
-    <Dashboard initial={EMPTY} readOnly externalSnapshot={snapshot} externalHealthy={syncHealthy} />
+    <Dashboard initial={EMPTY} readOnly historyLoader={historyLoader} externalSnapshot={snapshot} externalHealthy={syncHealthy} />
     {error === 'TOKEN_INVALID' ? <p className="display-access-error" role="alert">展示 Token 已失效，请重新打开有效的展示链接。</p> : null}
   </>;
 }

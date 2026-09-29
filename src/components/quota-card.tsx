@@ -1,5 +1,7 @@
 import type { DashboardAccount } from '../contracts/dashboard';
+import type { QuotaHistoryLoader } from '../contracts/quota-history';
 import MetricView from './metric-view';
+import QuotaHistory from './quota-history';
 
 const refreshStatusText = {
   idle: '可刷新',
@@ -17,11 +19,12 @@ export interface QuotaCardProps {
   now: Date;
   onRefresh(accountId: string): void | Promise<void>;
   readOnly?: boolean;
+  historyLoader?: QuotaHistoryLoader;
 }
 
 const SNAPSHOT_EXPIRY_MS = 15 * 60 * 1_000;
 
-export default function QuotaCard({ account, now, onRefresh, readOnly = false }: QuotaCardProps) {
+export default function QuotaCard({ account, now, onRefresh, readOnly = false, historyLoader }: QuotaCardProps) {
   const metrics = account.snapshot?.metrics ?? [];
   const busy = account.refreshStatus === 'queued' || account.refreshStatus === 'running';
   const freshnessTimestamp = account.lastSuccessAt ?? account.snapshot?.observedAt ?? null;
@@ -51,6 +54,9 @@ export default function QuotaCard({ account, now, onRefresh, readOnly = false }:
         {metrics.map(metric => <MetricView key={`${metric.kind}:${metric.key}`} metric={metric} />)}
       </div>
       : <p className="ds-constraint">{account.snapshot ? '服务暂不提供可展示的额度' : '尚未获取额度数据'}</p>}
+
+    {historyLoader ? <QuotaHistory accountId={account.id} loadHistory={historyLoader} />
+      : readOnly ? <p className="ds-constraint">静态预览不提供额度历史</p> : null}
 
     <footer className="ds-card__footer">
       <div className="ds-stack">
