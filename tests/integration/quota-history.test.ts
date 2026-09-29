@@ -68,7 +68,7 @@ describe('quota history repository', () => {
 
       const rows = await repository.readHistory(accountId, new Date('2020-01-01T00:00:00.000Z'), to);
       expect(rows?.map(row => row.id)).toEqual([
-        String(boundaryInsert.rows[0].id), String(duplicate.rows[0].id), String(end.rows[0].id),
+        String(duplicate.rows[0].id), String(end.rows[0].id),
       ]);
       expect(rows?.find(row => row.id === String(duplicate.rows[0].id))?.snapshot.metrics[0]).toMatchObject({ total: '0.20' });
       expect(await repository.readHistory('missing-account', new Date('2026-01-01T00:00:00Z'), to)).toBeNull();

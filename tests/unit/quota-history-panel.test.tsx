@@ -67,4 +67,17 @@ describe('QuotaHistory', () => {
     expect(loader.mock.calls.length).toBe(before);
     unmount();
   });
+
+  it('clears history when the loader identity changes before the new loader succeeds', async () => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    const firstLoader = vi.fn<QuotaHistoryLoader>(async () => history('24h', 72));
+    const secondLoader = vi.fn<QuotaHistoryLoader>(() => new Promise((_resolve, reject) => {
+      setTimeout(() => reject(new Error('unauthorized')), 0);
+    }));
+    const { rerender } = render(<QuotaHistory accountId="account-a" loadHistory={firstLoader} />);
+    await waitFor(() => expect(screen.getByText('72')).toBeInTheDocument());
+    rerender(<QuotaHistory accountId="account-a" loadHistory={secondLoader} />);
+    await waitFor(() => expect(screen.getByText('历史加载失败')).toBeInTheDocument());
+    expect(screen.queryByText('72')).not.toBeInTheDocument();
+  });
 });

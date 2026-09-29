@@ -16,14 +16,15 @@ export default function QuotaHistory({ accountId, loadHistory }: { accountId: st
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const historyRef = useRef<QuotaHistoryDto | null>(null);
-  const identityRef = useRef<string | null>(null);
+  const identityRef = useRef<{ accountId: string; range: QuotaHistoryRange; loadHistory: QuotaHistoryLoader } | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
 
   useEffect(() => {
-    const identity = `${accountId}:${range}`;
-    const preserve = identityRef.current === identity && historyRef.current?.accountId === accountId && historyRef.current?.range === range;
-    identityRef.current = identity;
+    const previousIdentity = identityRef.current;
+    const preserve = previousIdentity?.accountId === accountId && previousIdentity.range === range && previousIdentity.loadHistory === loadHistory &&
+      historyRef.current?.accountId === accountId && historyRef.current?.range === range;
+    identityRef.current = { accountId, range, loadHistory };
     const generation = ++generationRef.current;
     controllerRef.current?.abort();
     if (!preserve) {

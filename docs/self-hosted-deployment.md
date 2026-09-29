@@ -1,6 +1,6 @@
 # 自托管部署：codex-status.shemu.top
 
-Web/API 与独立展示页当前从 `/opt/codex-status-dashboard/app-release-20260924T153229Z` 运行，数据库已执行 `010-quota-history-index.sql`（以及此前迁移）；Provider Runtime 的 worker 沿用上一版镜像。此前的 `/opt/codex-status-dashboard/app` 目录保持原样。私有配置位于 `/opt/codex-status-dashboard/private`。数据库、Web/API、Provider Runtime 与独立展示页分开运行。Web/API 仅监听服务器 `127.0.0.1:3100`，展示页仅监听 `127.0.0.1:3101`，数据库只在 Compose 内网开放。
+Web/API 与独立展示页当前从 `/opt/codex-status-dashboard/app-release-20260924T153229Z` 运行，数据库已执行 `009-session-harness.sql` 迁移；Provider Runtime 的 worker 沿用上一版镜像。此前的 `/opt/codex-status-dashboard/app` 目录保持原样。私有配置位于 `/opt/codex-status-dashboard/private`。数据库、Web/API、Provider Runtime 与独立展示页分开运行。Web/API 仅监听服务器 `127.0.0.1:3100`，展示页仅监听 `127.0.0.1:3101`，数据库只在 Compose 内网开放。
 
 每次更新都把新源码放在 `/opt/codex-status-dashboard/` 下独立的 `app-release-<UTC 时间戳>` 目录中，再从该目录运行 Compose。不要把 release 放进额外的 `releases/<时间戳>/` 子目录；Compose 文件中的私有文件挂载路径按 release 直接位于根目录下编写，必须解析到 `/opt/codex-status-dashboard/private`。保留旧 release 和数据库备份，直到新版本通过验收。
 

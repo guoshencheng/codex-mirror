@@ -30,11 +30,18 @@ describe('quota history series', () => {
     const dto = buildQuotaHistory(accountId, '24h', [row('2026-09-28T23:00:00.000Z')], now);
     expect(dto.from).toBe('2026-09-28T00:00:00.000Z');
     expect(dto.to).toBe(now.toISOString());
-    expect(dto.bucketSeconds).toBe(1_800);
+    expect(dto.bucketSeconds).toBe(300);
     expect(dto.retentionDays).toBe(90);
     expect(dto.series).toHaveLength(1);
     expect(dto.series[0]).toMatchObject({ kind: 'quota-window', unit: '%', windowDurationSeconds: 18_000 });
     expect(dto.series[0]?.points[0]).toMatchObject({ value: 72, breakBefore: true });
+  });
+
+  it('uses the designed sampling bucket for each history range', () => {
+    const expected = { '24h': 300, '7d': 1_800, '30d': 7_200, '90d': 21_600 } as const;
+    for (const [range, bucketSeconds] of Object.entries(expected) as Array<[keyof typeof expected, number]>) {
+      expect(buildQuotaHistory(accountId, range, [row('2026-09-28T23:00:00.000Z')], now).bucketSeconds).toBe(bucketSeconds);
+    }
   });
 
   it('marks missing metrics, service outages, and gaps beyond fifteen minutes as breaks', () => {
@@ -47,8 +54,8 @@ describe('quota history series', () => {
       row('2026-09-28T20:50:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 10, windowDurationSeconds: 18_000, resetsAt: null }] }),
     ], now);
     const points = series(dto, 'primary')!.points;
-    expect(points.map(point => point.value)).toEqual([72, 50, 90]);
-    expect(points.map(point => point.breakBefore)).toEqual([true, true, true]);
+    expect(points.map(point => point.value)).toEqual([72, 60, 50, 90]);
+    expect(points.map(point => point.breakBefore)).toEqual([true, true, false, true]);
 
     const exact = buildQuotaHistory(accountId, '24h', [
       row('2026-09-28T21:00:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 20, windowDurationSeconds: 18_000, resetsAt: null }] }),

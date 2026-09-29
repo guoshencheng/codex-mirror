@@ -20,6 +20,9 @@
 .point:focus, .point:hover { stroke: var(--ds-primary-foreground); stroke-width: 2; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--ds-text-muted); font-size: 9px; }
 .legendDot { display: inline-block; width: 6px; height: 6px; margin-right: 4px; background: var(--ds-primary); }
+.tick line { stroke: var(--ds-border-strong); stroke-width: 1; }
+.tick text, .axisLabel { fill: var(--ds-text-muted); font-size: 8px; }
+.plotNotice { margin: 4px 0 0; color: var(--ds-notice-text); font-size: 9px; }
 .summary { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0 0; }
 .summary span:nth-child(2) { color: var(--ds-text-body); }
 .pointCount { margin: 2px 0 0; }

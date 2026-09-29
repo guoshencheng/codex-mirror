@@ -17,8 +17,8 @@ const RANGE_SECONDS: Record<QuotaHistoryRange, number> = {
   '90d': RETENTION_SECONDS,
 };
 const BUCKET_SECONDS: Record<QuotaHistoryRange, number> = {
-  '24h': 30 * 60,
-  '7d': 2 * 60 * 60,
+  '24h': 5 * 60,
+  '7d': 30 * 60,
   '30d': 2 * 60 * 60,
   '90d': 6 * 60 * 60,
 };
