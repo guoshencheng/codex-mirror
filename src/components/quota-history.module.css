@@ -1,0 +1,25 @@
+.history { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ds-border); }
+.historyHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.historyHeader h3 { margin: 0; color: var(--ds-text-strong); font-size: 12px; }
+.rangeButtons { display: flex; flex-wrap: wrap; gap: 4px; }
+.rangeButtons button { min-height: 24px; padding: 3px 7px; border: 1px solid var(--ds-border); border-radius: 4px; background: transparent; color: var(--ds-text-muted); cursor: pointer; font-size: 10px; }
+.rangeButtons button[aria-pressed="true"] { border-color: var(--ds-primary-border); background: var(--ds-selected-bg); color: var(--ds-composite-text); }
+.loading, .empty, .error, .sampled, .pointCount, .summary { color: var(--ds-text-muted); font-size: 10px; }
+.loading, .empty { margin: 12px 0 4px; }
+.sampled { margin: 5px 0 0; color: var(--ds-composite-text); }
+.error { margin: 8px 0; color: var(--ds-notice-text); }
+.error button { margin-left: 5px; padding: 2px 6px; border: 1px solid var(--ds-notice-border); border-radius: 3px; background: transparent; color: inherit; cursor: pointer; }
+.chartList { display: grid; gap: 12px; margin-top: 8px; }
+.chartGroup { min-width: 0; }
+.chartGroup h4 { margin: 0 0 3px; color: var(--ds-text-body); font-size: 10px; font-weight: 600; }
+.chart { display: block; width: 100%; min-height: 116px; overflow: visible; border: 1px solid var(--ds-border); background: var(--ds-surface); outline: none; }
+.chart:focus { border-color: var(--ds-primary-border); }
+.axis { stroke: var(--ds-border-strong); stroke-width: 1; }
+.line { fill: none; stroke: var(--ds-primary); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.point { fill: var(--ds-primary); cursor: pointer; }
+.point:focus, .point:hover { stroke: var(--ds-primary-foreground); stroke-width: 2; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--ds-text-muted); font-size: 9px; }
+.legendDot { display: inline-block; width: 6px; height: 6px; margin-right: 4px; background: var(--ds-primary); }
+.summary { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0 0; }
+.summary span:nth-child(2) { color: var(--ds-text-body); }
+.pointCount { margin: 2px 0 0; }
