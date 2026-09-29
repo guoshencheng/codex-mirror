@@ -2,7 +2,7 @@
 // Server-side activation for the self-hosted PM2 deployment.
 // Usage: node deploy/self-hosted/activate.mjs <absolute-release-path>
 // Runs migrations, rewrites the PM2 ecosystem to point at the new release,
-// reloads web/worker, refreshes the display nginx mount, and waits for health.
+// recreates web/worker, refreshes the display nginx mount, and waits for health.
 // Never prints secret values.
 
 import { spawnSync } from 'node:child_process';
@@ -132,8 +132,43 @@ module.exports = {
 writeFileSync(ECOSYSTEM_PATH, ecosystem, { mode: 0o600 });
 chmodSync(ECOSYSTEM_PATH, 0o600);
 
-// 4. Reload processes and persist for resurrection.
-run('pm2', ['startOrReload', ECOSYSTEM_PATH, '--only', 'dashboard-web,dashboard-worker']);
+// 4. Recreate processes and persist for resurrection.
+// `startOrReload` keeps the existing PM2 process metadata, including its cwd.
+// Delete the managed apps first so the new release becomes the actual process cwd.
+const managedNames = ['dashboard-web', 'dashboard-worker'];
+const listed = spawnSync('pm2', ['jlist'], { encoding: 'utf8' });
+if (listed.error || listed.status !== 0) {
+  console.error('activate: could not inspect PM2 processes');
+  process.exit(1);
+}
+let managedRunning = [];
+try {
+  const processes = JSON.parse(listed.stdout);
+  managedRunning = managedNames.filter(name => processes.some(process => process.name === name));
+} catch {
+  console.error('activate: PM2 returned invalid process state');
+  process.exit(1);
+}
+if (managedRunning.length) run('pm2', ['delete', ...managedRunning]);
+run('pm2', ['start', ECOSYSTEM_PATH, '--only', 'dashboard-web,dashboard-worker']);
+const started = spawnSync('pm2', ['jlist'], { encoding: 'utf8' });
+if (started.error || started.status !== 0) {
+  console.error('activate: could not verify PM2 processes after start');
+  process.exit(1);
+}
+try {
+  const processes = JSON.parse(started.stdout);
+  for (const name of managedNames) {
+    const process = processes.find(item => item.name === name);
+    if (!process || process.pm2_env?.pm_cwd !== release) {
+      console.error(`activate: ${name} is not running from the new release`);
+      process.exit(1);
+    }
+  }
+} catch {
+  console.error('activate: PM2 returned invalid process state after start');
+  process.exit(1);
+}
 run('pm2', ['save']);
 
 // 5. Wait for web health; leave processes running and fail the deploy on timeout.
