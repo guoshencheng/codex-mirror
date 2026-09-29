@@ -23,7 +23,7 @@ it('uses a display link to show the shared read-only pixel dashboard', async () 
   render(<App />);
   await waitFor(() => expect(screen.getByTestId('pixel-dashboard')).toBeTruthy());
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
-    'https://codex-status.icerock.top/api/display/dashboard',
+    'https://codex-status.shemu.top/api/display/dashboard',
     expect.objectContaining({ headers: { Authorization: 'Bearer ' + token } }),
   ));
   fireEvent.click(screen.getByRole('button', { name: '查看设备状态' }));
@@ -64,7 +64,7 @@ it('passes the display API history loader into the shared read-only quota detail
   await waitFor(() => expect(screen.getByTestId('pixel-dashboard')).toBeTruthy());
   fireEvent.click(screen.getByRole('button', { name: '查看 Codex 额度详情' }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
-    'https://codex-status.icerock.top/api/display/provider-accounts/account-a/history?range=24h',
+    'https://codex-status.shemu.top/api/display/provider-accounts/account-a/history?range=24h',
     expect.objectContaining({ headers: { Authorization: 'Bearer ' + token } }),
   ));
   expect(screen.queryByRole('button', { name: '刷新额度' })).toBeNull();
