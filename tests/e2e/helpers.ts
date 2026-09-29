@@ -9,6 +9,7 @@ interface E2EFixture {
   deviceId: string;
   deviceToken: string;
   epoch: string;
+  accountId: string;
 }
 
 let fixturePromise: Promise<E2EFixture> | undefined;

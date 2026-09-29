@@ -1,6 +1,6 @@
 # 自托管部署：codex-status.shemu.top
 
-Web/API 与独立展示页当前从 `/opt/codex-status-dashboard/app-release-20260924T153229Z` 运行，数据库已执行 `009-session-harness.sql` 迁移；Provider Runtime 的 worker 沿用上一版镜像。此前的 `/opt/codex-status-dashboard/app` 目录保持原样。私有配置位于 `/opt/codex-status-dashboard/private`。数据库、Web/API、Provider Runtime 与独立展示页分开运行。Web/API 仅监听服务器 `127.0.0.1:3100`，展示页仅监听 `127.0.0.1:3101`，数据库只在 Compose 内网开放。
+Web/API 与独立展示页当前从 `/opt/codex-status-dashboard/app-release-20260924T153229Z` 运行，数据库已执行 `010-quota-history-index.sql`（以及此前迁移）；Provider Runtime 的 worker 沿用上一版镜像。此前的 `/opt/codex-status-dashboard/app` 目录保持原样。私有配置位于 `/opt/codex-status-dashboard/private`。数据库、Web/API、Provider Runtime 与独立展示页分开运行。Web/API 仅监听服务器 `127.0.0.1:3100`，展示页仅监听 `127.0.0.1:3101`，数据库只在 Compose 内网开放。
 
 每次更新都把新源码放在 `/opt/codex-status-dashboard/` 下独立的 `app-release-<UTC 时间戳>` 目录中，再从该目录运行 Compose。不要把 release 放进额外的 `releases/<时间戳>/` 子目录；Compose 文件中的私有文件挂载路径按 release 直接位于根目录下编写，必须解析到 `/opt/codex-status-dashboard/private`。保留旧 release 和数据库备份，直到新版本通过验收。
 
@@ -30,6 +30,8 @@ Kindle 等不方便输入 Token 的设备，可直接打开 `https://codex-statu
 `private/.env` 中的 `PROVIDER_CREDENTIAL_KEY` 用于解密数据库中的 DeepSeek/Kimi API Key，必须连同数据库备份长期保存。`private/provider-accounts.json` 和 `private/secrets/` 管理文件配置的 Provider；Web 新增的管理账号由 worker 自动刷新。Codex/Kimi CLI 授权位于 Compose 的 `runtime-auth` 卷。
 
 worker 的 Codex 额度读取直接请求 ChatGPT 用量 API（`chatgpt.com/backend-api/wham/usage`），凭据为账号目录中的 `auth.json`，访问令牌过期时由 worker 自行刷新。若部署机无法直连 OpenAI，在 `private/.env` 设置 `WORKER_PROXY=http://<代理地址>:<端口>`（可选 `WORKER_NO_PROXY`，默认 `localhost,127.0.0.1,db`），worker 的全部出站 HTTPS 会经该代理；代理只作用于 worker 容器，宿主机与其他容器不受影响。
+
+额度历史由 worker 每次成功采集时写入 `quota_snapshots`，查询接口只开放最近 90 天；worker 每天清理 90 天前的记录。历史图在额度详情中按 24 小时、7 天、30 天、90 天查看，长范围使用采样趋势，缺失采样会显示断点。历史依赖 worker 持续运行，worker 停机期间不会生成补点；已清理或从未采集的数据无法恢复。升级时必须让迁移服务先应用 `010-quota-history-index.sql`，再启动 Web 和 worker；不需要回填历史。
 
 ### 在看板中添加 Codex 账号
 
