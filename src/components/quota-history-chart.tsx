@@ -180,8 +180,7 @@ function configFor(group: Group, data: ChartPoint[], bounds: { min: number; max:
       tooltip: { series: true },
       elementHighlight: true,
     },
-    style: { lineWidth: 0.5, shape: 'smooth' },
-    point: { size: 1, shape: 'point' },
+    line: { style: { lineWidth: 0.5, shape: 'smooth' } },
   };
   return config;
 }

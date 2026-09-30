@@ -6,12 +6,12 @@ import type { QuotaHistoryDto } from '../../src/contracts/quota-history';
 import QuotaHistoryChart from '../../src/components/quota-history-chart';
 
 vi.mock('@ant-design/plots', () => ({
-  Line: ({ data, style, point, axis }: {
+  Line: ({ data, line, point, axis }: {
     data: unknown[];
-    style?: { lineWidth?: number };
-    point?: { size?: number };
+    line?: { style?: { lineWidth?: number } };
+    point?: { size?: number } | false;
     axis?: { x?: { labelAutoRotate?: boolean }; y?: { title?: false | string } };
-  }) => <div data-testid="antv-line-mock" data-points={data.length} data-line-width={style?.lineWidth} data-point-size={point?.size} data-label-auto-rotate={String(axis?.x?.labelAutoRotate)} data-y-axis-title={String(axis?.y?.title)} />,
+  }) => <div data-testid="antv-line-mock" data-points={data.length} data-line-width={line?.style?.lineWidth} data-point-enabled={String(Boolean(point))} data-label-auto-rotate={String(axis?.x?.labelAutoRotate)} data-y-axis-title={String(axis?.y?.title)} />,
 }));
 
 const history: QuotaHistoryDto = {
@@ -42,7 +42,7 @@ describe('QuotaHistoryChart', () => {
     expect(screen.getAllByText('USD').length).toBeGreaterThan(0);
     const line = screen.getAllByTestId('antv-line-mock')[0]!;
     expect(line).toHaveAttribute('data-line-width', '0.5');
-    expect(line).toHaveAttribute('data-point-size', '1');
+    expect(line).toHaveAttribute('data-point-enabled', 'false');
     expect(line).toHaveAttribute('data-label-auto-rotate', 'false');
     expect(line).toHaveAttribute('data-y-axis-title', 'false');
     expect(screen.getAllByTestId('quota-history-range')[0]).toHaveTextContent(/^\d{2}\/\d{2} \d{2}:\d{2} — \d{2}\/\d{2} \d{2}:\d{2}$/);
