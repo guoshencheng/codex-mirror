@@ -6,7 +6,12 @@ import type { QuotaHistoryDto } from '../../src/contracts/quota-history';
 import QuotaHistoryChart from '../../src/components/quota-history-chart';
 
 vi.mock('@ant-design/plots', () => ({
-  Line: ({ data }: { data: unknown[] }) => <div data-testid="antv-line-mock" data-points={data.length} />,
+  Line: ({ data, style, point, axis }: {
+    data: unknown[];
+    style?: { lineWidth?: number };
+    point?: { size?: number };
+    axis?: { x?: { labelAutoRotate?: boolean } };
+  }) => <div data-testid="antv-line-mock" data-points={data.length} data-line-width={style?.lineWidth} data-point-size={point?.size} data-label-auto-rotate={String(axis?.x?.labelAutoRotate)} />,
 }));
 
 const history: QuotaHistoryDto = {
@@ -35,6 +40,11 @@ describe('QuotaHistoryChart', () => {
     expect(screen.getByText('0%')).toBeInTheDocument();
     expect(screen.getAllByText('%').length).toBeGreaterThan(0);
     expect(screen.getAllByText('USD').length).toBeGreaterThan(0);
+    const line = screen.getAllByTestId('antv-line-mock')[0]!;
+    expect(line).toHaveAttribute('data-line-width', '1');
+    expect(line).toHaveAttribute('data-point-size', '2');
+    expect(line).toHaveAttribute('data-label-auto-rotate', 'false');
+    expect(screen.getAllByTestId('quota-history-range')[0]).toHaveTextContent(/^\d{2}\/\d{2} \d{2}:\d{2} — \d{2}\/\d{2} \d{2}:\d{2}$/);
   });
 
   it('exposes the line chart series and axis labels', () => {

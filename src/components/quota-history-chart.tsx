@@ -70,6 +70,14 @@ function formatTime(value: string | Date): string {
   }
 }
 
+function formatCompactTime(value: string | Date): string {
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (!Number.isFinite(timestamp)) return String(value);
+  const date = new Date(timestamp);
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function formatPointValue(series: QuotaHistorySeries, point: QuotaHistoryPoint): string {
   return `${String(point.value)}${series.kind === 'quota-window' ? '%' : ` ${series.unit}`}`;
 }
@@ -153,7 +161,7 @@ function configFor(group: Group, data: ChartPoint[], bounds: { min: number; max:
       color: { range: group.series.map((_, index) => colorFor(index)) },
     },
     axis: {
-      x: { title: false, labelFormatter: (value: string | Date) => formatTime(value) },
+      x: { title: false, labelAutoRotate: false, labelAutoHide: true, labelFormatter: (value: string | Date) => formatCompactTime(value) },
       y: {
         title: group.unit,
         labelFormatter: (value: string | number) => group.kind === 'quota-window' ? `${value}%` : formatAxisValue(Number(value)),
@@ -172,8 +180,8 @@ function configFor(group: Group, data: ChartPoint[], bounds: { min: number; max:
       tooltip: { series: true },
       elementHighlight: true,
     },
-    style: { lineWidth: 2, shape: 'smooth' },
-    point: { size: 3, shape: 'point' },
+    style: { lineWidth: 1, shape: 'smooth' },
+    point: { size: 2, shape: 'point' },
   };
   return config;
 }
@@ -197,7 +205,7 @@ function HistoryGroup({ group, history, primary }: { group: Group; history: Quot
       <span>{ticks[0]}</span>
       <span>{ticks[1] ?? ''}</span>
       <span>{ticks[2] ?? ''}</span>
-      <span className={styles.axisRange}>{formatTime(history.from)} — {formatTime(history.to)}</span>
+      <span className={styles.axisRange} data-testid="quota-history-range">{formatCompactTime(history.from)} — {formatCompactTime(history.to)}</span>
       <span className={styles.axisTime}>时间</span>
     </div>
     <div className={styles.legend} aria-label="图例">

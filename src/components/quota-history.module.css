@@ -18,6 +18,7 @@
 .noPlot { display: grid; min-height: 208px; margin: 0; place-items: center; color: var(--ds-text-muted); font-size: 10px; }
 .axisMeta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; margin-top: 3px; color: var(--ds-text-muted); font-size: 8px; line-height: 1.3; }
 .axisMeta span:not(.axisTime) { min-width: 28px; }
+.axisRange { flex: 1 1 auto; text-align: center; white-space: nowrap; }
 .axisTime { flex: 1 1 100%; text-align: center; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--ds-text-muted); font-size: 9px; }
 .legendDot { display: inline-block; width: 6px; height: 6px; margin-right: 4px; background: var(--ds-primary); }
