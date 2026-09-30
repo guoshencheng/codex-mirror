@@ -163,7 +163,7 @@ function configFor(group: Group, data: ChartPoint[], bounds: { min: number; max:
     axis: {
       x: { title: false, labelAutoRotate: false, labelAutoHide: true, labelFormatter: (value: string | Date) => formatCompactTime(value) },
       y: {
-        title: group.unit,
+        title: false,
         labelFormatter: (value: string | number) => group.kind === 'quota-window' ? `${value}%` : formatAxisValue(Number(value)),
       },
     },
@@ -180,8 +180,8 @@ function configFor(group: Group, data: ChartPoint[], bounds: { min: number; max:
       tooltip: { series: true },
       elementHighlight: true,
     },
-    style: { lineWidth: 1, shape: 'smooth' },
-    point: { size: 2, shape: 'point' },
+    style: { lineWidth: 0.5, shape: 'smooth' },
+    point: { size: 1, shape: 'point' },
   };
   return config;
 }
