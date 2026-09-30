@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { snapshotForQuotaHistory } from '../../quota/history-persistence';
 import type { ProviderSnapshot } from '../../../contracts/quota';
 
 export type CodexLoginStatus = 'queued' | 'starting' | 'awaiting' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
@@ -114,7 +115,10 @@ export class CodexLoginRepository {
       await client.query(`INSERT INTO quota_refresh_status(account_id, last_attempt_at, last_success_at, next_attempt_at)
         VALUES ($1, $2, $2, $3)`, [row.accountId, now, new Date(now.getTime() + 300_000)]);
       await client.query('INSERT INTO quota_latest(account_id, snapshot) VALUES ($1, $2::jsonb)', [row.accountId, JSON.stringify(snapshot)]);
-      await client.query('INSERT INTO quota_snapshots(account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [row.accountId, snapshot.observedAt, JSON.stringify(snapshot)]);
+      const historySnapshot = snapshotForQuotaHistory(snapshot);
+      if (historySnapshot) {
+        await client.query('INSERT INTO quota_snapshots(account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [row.accountId, historySnapshot.observedAt, JSON.stringify(historySnapshot)]);
+      }
       await client.query("UPDATE codex_login_requests SET status = 'succeeded', verification_url = NULL, user_code = NULL, updated_at = now() WHERE id = $1", [id]);
       await client.query('COMMIT');
       return true;

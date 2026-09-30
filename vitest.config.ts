@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.{ts,tsx}'],
     environment: 'node',
+    setupFiles: ['tests/support/mock-ant-design-plots.ts'],
   },
 });

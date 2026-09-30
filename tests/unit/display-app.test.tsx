@@ -62,7 +62,7 @@ it('passes the display API history loader into the shared read-only quota detail
   vi.stubGlobal('fetch', fetcher);
   render(<App />);
   await waitFor(() => expect(screen.getByTestId('pixel-dashboard')).toBeTruthy());
-  fireEvent.click(screen.getByRole('button', { name: '查看 Codex 额度详情与历史' }));
+  fireEvent.click(screen.getByRole('button', { name: '查看 Codex 额度详情' }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
     'https://codex-status.icerock.top/api/display/provider-accounts/account-a/history?range=24h',
     expect.objectContaining({ headers: { Authorization: 'Bearer ' + token } }),

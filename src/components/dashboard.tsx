@@ -143,7 +143,6 @@ export default function Dashboard({ initial, readOnly = false, externalSnapshot,
           <section className={styles.quota} aria-labelledby="quota-heading">
             <div className={styles.sectionHead}><h2 id="quota-heading">额度 <small>/ 剩余</small></h2>
               <Pager page={visibleAccountPage} pages={accountPages} label="额度" onChange={setAccountPage} />
-              {accountPages === 1 ? <span>点击账号查看额度历史</span> : null}
             </div>
             <ul className={styles.providerList} aria-label="Provider 额度">
               {data.accounts.slice(visibleAccountPage * 3, visibleAccountPage * 3 + 3).map(account => <PixelQuotaRow

@@ -15,7 +15,7 @@ function row(at: string, snapshot: Partial<ProviderSnapshot> = {}): QuotaHistory
       providerId: 'fake',
       observedAt: at,
       serviceAvailable: true,
-      metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 28, windowDurationSeconds: 18_000, resetsAt: null }],
+      metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 28, windowDurationSeconds: 604_800, resetsAt: null }],
       ...snapshot,
     },
   };
@@ -33,7 +33,7 @@ describe('quota history series', () => {
     expect(dto.bucketSeconds).toBe(300);
     expect(dto.retentionDays).toBe(90);
     expect(dto.series).toHaveLength(1);
-    expect(dto.series[0]).toMatchObject({ kind: 'quota-window', unit: '%', windowDurationSeconds: 18_000 });
+    expect(dto.series[0]).toMatchObject({ kind: 'quota-window', unit: '%', windowDurationSeconds: 604_800 });
     expect(dto.series[0]?.points[0]).toMatchObject({ value: 72, breakBefore: true });
   });
 
@@ -48,24 +48,24 @@ describe('quota history series', () => {
     const dto = buildQuotaHistory(accountId, '24h', [
       row('2026-09-28T20:00:00.000Z'),
       row('2026-09-28T20:05:00.000Z', { metrics: [] }),
-      row('2026-09-28T20:10:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 40, windowDurationSeconds: 18_000, resetsAt: null }] }),
-      row('2026-09-28T20:25:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 50, windowDurationSeconds: 18_000, resetsAt: null }] }),
+      row('2026-09-28T20:10:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 40, windowDurationSeconds: 604_800, resetsAt: null }] }),
+      row('2026-09-28T20:25:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 50, windowDurationSeconds: 604_800, resetsAt: null }] }),
       row('2026-09-28T20:40:00.000Z', { serviceAvailable: false }),
-      row('2026-09-28T20:50:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 10, windowDurationSeconds: 18_000, resetsAt: null }] }),
+      row('2026-09-28T20:50:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 10, windowDurationSeconds: 604_800, resetsAt: null }] }),
     ], now);
     const points = series(dto, 'primary')!.points;
     expect(points.map(point => point.value)).toEqual([72, 60, 50, 90]);
     expect(points.map(point => point.breakBefore)).toEqual([true, true, false, true]);
 
     const exact = buildQuotaHistory(accountId, '24h', [
-      row('2026-09-28T21:00:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 20, windowDurationSeconds: 18_000, resetsAt: null }] }),
-      row('2026-09-28T21:15:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 30, windowDurationSeconds: 18_000, resetsAt: null }] }),
+      row('2026-09-28T21:00:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 20, windowDurationSeconds: 604_800, resetsAt: null }] }),
+      row('2026-09-28T21:15:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 30, windowDurationSeconds: 604_800, resetsAt: null }] }),
     ], now);
     expect(series(exact, 'primary')!.points.map(point => point.breakBefore)).toEqual([true, false]);
 
     const after = buildQuotaHistory(accountId, '24h', [
       row('2026-09-28T21:00:00.000Z'),
-      row('2026-09-28T21:15:00.001Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 30, windowDurationSeconds: 18_000, resetsAt: null }] }),
+      row('2026-09-28T21:15:00.001Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 30, windowDurationSeconds: 604_800, resetsAt: null }] }),
     ], now);
     expect(series(after, 'primary')!.points[1]?.breakBefore).toBe(true);
   });
@@ -73,14 +73,14 @@ describe('quota history series', () => {
   it('splits window durations and currencies while preserving balance precision', () => {
     const dto = buildQuotaHistory(accountId, '7d', [row('2026-09-28T20:00:00.000Z', {
       metrics: [
-        { kind: 'quota-window', key: 'primary', label: '5H', usedPercent: 10, windowDurationSeconds: 18_000, resetsAt: null },
+        { kind: 'quota-window', key: 'primary', label: '日', usedPercent: 10, windowDurationSeconds: 86_400, resetsAt: null },
         { kind: 'quota-window', key: 'primary', label: '周', usedPercent: 20, windowDurationSeconds: 604_800, resetsAt: null },
         { kind: 'balance', key: 'wallet', label: '余额', currency: 'USD', total: '9007199254740992.01', granted: null, toppedUp: null },
         { kind: 'balance', key: 'wallet', label: '余额', currency: 'CNY', total: '1.00', granted: null, toppedUp: null },
       ],
     }), row('2026-09-28T20:10:00.000Z', {
       metrics: [
-        { kind: 'quota-window', key: 'primary', label: '5H', usedPercent: 90, windowDurationSeconds: 18_000, resetsAt: null },
+        { kind: 'quota-window', key: 'primary', label: '日', usedPercent: 90, windowDurationSeconds: 86_400, resetsAt: null },
         { kind: 'balance', key: 'wallet', label: '余额', currency: 'USD', total: '9007199254740992.02', granted: null, toppedUp: null },
       ],
     })], now);
@@ -92,12 +92,24 @@ describe('quota history series', () => {
     expect(dto.series.find(item => item.kind === 'balance' && item.unit === 'CNY')?.points[0]?.breakBefore).toBe(true);
   });
 
+  it('omits five-hour windows from history series', () => {
+    const dto = buildQuotaHistory(accountId, '24h', [row('2026-09-28T20:00:00.000Z', {
+      metrics: [
+        { kind: 'quota-window', key: 'primary', label: '5H', usedPercent: 10, windowDurationSeconds: 18_000, resetsAt: null },
+        { kind: 'quota-window', key: 'weekly', label: '周', usedPercent: 20, windowDurationSeconds: 604_800, resetsAt: null },
+      ],
+    })], now);
+    expect(dto.series.some(item => item.windowDurationSeconds === 18_000)).toBe(false);
+    expect(dto.series).toHaveLength(1);
+    expect(dto.series[0]).toMatchObject({ key: 'weekly', windowDurationSeconds: 604_800 });
+  });
+
   it('keeps reset peaks and propagates breaks through bucket sampling', () => {
     const rows = [
-      row('2026-09-20T00:00:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 0, windowDurationSeconds: 18_000, resetsAt: null }] }),
-      row('2026-09-20T00:10:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 100, windowDurationSeconds: 18_000, resetsAt: null }] }),
+      row('2026-09-20T00:00:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 0, windowDurationSeconds: 604_800, resetsAt: null }] }),
+      row('2026-09-20T00:10:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 100, windowDurationSeconds: 604_800, resetsAt: null }] }),
       row('2026-09-20T00:20:00.000Z', { metrics: [] }),
-      row('2026-09-20T00:30:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 20, windowDurationSeconds: 18_000, resetsAt: null }] }),
+      row('2026-09-20T00:30:00.000Z', { metrics: [{ kind: 'quota-window', key: 'primary', label: '主窗口', usedPercent: 20, windowDurationSeconds: 604_800, resetsAt: null }] }),
     ];
     const dto = buildQuotaHistory(accountId, '30d', rows, now);
     const points = series(dto, 'primary')!.points;

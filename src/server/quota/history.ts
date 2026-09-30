@@ -7,6 +7,7 @@ import {
   type QuotaHistorySeries,
 } from '../../contracts/quota-history';
 import type { QuotaHistoryRow, QuotaRepository } from './repository';
+import { isQuotaHistoryMetric } from './history-persistence';
 
 const RETENTION_SECONDS = 90 * 24 * 60 * 60;
 const GAP_SECONDS = 15 * 60;
@@ -200,7 +201,7 @@ export function buildQuotaHistory(
     const atMs = Date.parse(row.observedAt);
     if (!Number.isFinite(atMs) || atMs < fromMs || atMs > toMs) continue;
     const active = new Set<string>();
-    for (const metric of row.snapshot.metrics) {
+    for (const metric of row.snapshot.metrics.filter(isQuotaHistoryMetric)) {
       const id = seriesId(metric);
       active.add(id);
       const state = states.get(id) ?? createState(metric, id);

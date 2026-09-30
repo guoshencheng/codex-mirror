@@ -28,8 +28,8 @@ export default function PixelQuotaRow({ account, now, onOpen }: {
   const notice = quotaNotice(account, now);
   return <li className={styles.providerItem}>
     <button className={`${styles.providerRow} ${notice ? styles.quotaWarning : ''}`}
-      aria-label={`查看 ${account.label} 额度详情与历史`} onClick={onOpen}
-      title={`${account.providerId} · ${account.label} · 点击查看额度历史${notice ? ` · ${notice}` : ''}`}>
+      aria-label={`查看 ${account.label} 额度详情`} onClick={onOpen}
+      title={`${account.providerId} · ${account.label}${notice ? ` · ${notice}` : ''}`}>
       <span className={styles.providerName}><i />
         <span>{account.providerId}<small>{notice ?? account.label}</small></span>
       </span>
@@ -37,7 +37,7 @@ export default function PixelQuotaRow({ account, now, onOpen }: {
         {metrics.length ? metrics.slice(0, 2).map(metric => <CompactMetric key={`${metric.kind}:${metric.key}`} metric={metric} />)
           : <span className={styles.emptyMetric}>尚无额度数据</span>}
       </span>
-      <span className={styles.more} aria-hidden="true">{metrics.length > 2 ? '+ 历史' : '历史 ›'}</span>
+      <span className={styles.more} aria-hidden="true">›</span>
     </button>
   </li>;
 }

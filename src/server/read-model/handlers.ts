@@ -3,6 +3,7 @@ import { requireAdmin, verifyCsrf } from '../auth/session';
 import { requestRefresh } from '../quota/requests';
 import { managedStrategy } from '../providers/managed';
 import { readManagedCredential } from '../providers/managed-credentials';
+import { snapshotForQuotaHistory } from '../quota/history-persistence';
 import { getAccounts, getDashboard, getDevices, getSessions } from './dashboard';
 
 const PRIVATE_NO_STORE = { 'Cache-Control': 'private, no-store' };
@@ -76,7 +77,10 @@ export function createDashboardHandlers(pool: Pool) {
             if (outcome.ok) {
               const snapshot = JSON.stringify(outcome.snapshot);
               await client.query('INSERT INTO quota_latest (account_id, snapshot) VALUES ($1, $2::jsonb) ON CONFLICT (account_id) DO UPDATE SET snapshot = EXCLUDED.snapshot', [id, snapshot]);
-              await client.query('INSERT INTO quota_snapshots (account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [id, outcome.snapshot.observedAt, snapshot]);
+              const historySnapshot = snapshotForQuotaHistory(outcome.snapshot);
+              if (historySnapshot) {
+                await client.query('INSERT INTO quota_snapshots (account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [id, historySnapshot.observedAt, JSON.stringify(historySnapshot)]);
+              }
               await client.query('UPDATE quota_refresh_status SET last_attempt_at = $2, last_success_at = $2, error_code = NULL, manual_requested_at = NULL, next_attempt_at = $3 WHERE account_id = $1', [id, now, new Date(now.getTime() + 300_000)]);
             } else {
               await client.query('UPDATE quota_refresh_status SET last_attempt_at = $2, error_code = $3, manual_requested_at = NULL, next_attempt_at = $4 WHERE account_id = $1', [id, now, outcome.error.code, new Date(now.getTime() + 60_000)]);

@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { ProviderAccountConfig, ProviderFailure, ProviderFailureCode, ProviderFetchResult, ProviderSnapshot, QuotaProviderStrategy } from '../../contracts/quota';
 import { validateProviderSnapshot } from '../providers/metric-schema';
 import { QuotaRepository } from './repository';
+import { snapshotForQuotaHistory } from './history-persistence';
 
 export type RefreshOutcome = 'success' | 'failed' | 'locked' | 'not-due';
 export interface AccountRefreshDependencies {
@@ -46,7 +47,10 @@ async function persistSuccess(client: PoolClient, accountId: string, snapshot: P
       INSERT INTO quota_latest (account_id, snapshot) VALUES ($1, $2::jsonb)
       ON CONFLICT (account_id) DO UPDATE SET snapshot = EXCLUDED.snapshot
     `, [accountId, json]);
-    await client.query('INSERT INTO quota_snapshots (account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [accountId, snapshot.observedAt, json]);
+    const historySnapshot = snapshotForQuotaHistory(snapshot);
+    if (historySnapshot) {
+      await client.query('INSERT INTO quota_snapshots (account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [accountId, historySnapshot.observedAt, JSON.stringify(historySnapshot)]);
+    }
     await client.query(`
       UPDATE quota_refresh_status SET last_success_at = $2, error_code = NULL, next_attempt_at = $3,
         failure_count = 0, auth_blocked = false,
