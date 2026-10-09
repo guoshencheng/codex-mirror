@@ -5,7 +5,6 @@ import { makeProviderRegistry, readProviderAccountsConfig, validateProviderAccou
 import { createDirectDatabasePool } from '../server/db/pool';
 import { QuotaRepository } from '../server/quota/repository';
 import { runAccountRefresh } from '../server/quota/refresh';
-import { cleanupAgentEvents } from '../server/events/retention';
 import { managedStrategy } from '../server/providers/managed';
 import { readManagedCredential } from '../server/providers/managed-credentials';
 import { CodexLoginRepository } from '../server/providers/codex/login-repository';
@@ -75,7 +74,6 @@ export async function runWorker(signal: AbortSignal): Promise<void> {
         }
         await refreshDueAccountsOnce(pool, repository, accounts, signal);
         if (Date.now() >= nextCleanupAt) {
-          await cleanupAgentEvents(pool, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
           await repository.cleanupHistory(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
           nextCleanupAt = Date.now() + 24 * 60 * 60 * 1000;
         }

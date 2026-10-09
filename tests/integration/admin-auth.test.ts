@@ -10,7 +10,6 @@ import { POST as postLogout } from '../../src/app/api/auth/logout/route';
 import { closeAuthDatabasePool } from '../../src/server/auth/database';
 import { requireAdmin, verifyCsrf } from '../../src/server/auth/session';
 import { serializeSessionCookie } from '../../src/server/auth/cookie';
-import { createDevice } from '../../src/server/events/devices';
 
 const TEST_PASSWORD = 'cdu_' + 'a'.repeat(43);
 
@@ -99,7 +98,7 @@ describe('administrator authentication over HTTP', () => {
     const setup = await admin.connect();
     try { await setup.query(`CREATE SCHEMA ${schema}`); } finally { setup.release(); }
     pool = new Pool({ connectionString: testConnectionString(), max: 4, options: `-c search_path=${schema}` });
-    for (const file of ['001-quota.sql', '002-events.sql', '003-admin.sql', '007-configured-user-token.sql']) {
+    for (const file of ['001-quota.sql', '003-admin.sql', '007-configured-user-token.sql']) {
       await pool.query(await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8'));
     }
 
@@ -169,15 +168,6 @@ describe('administrator authentication over HTTP', () => {
     expect(session.rows[0]?.token_hash).not.toBe(setCookie.split('=', 2)[1]?.split(';', 1)[0]);
     expect(session.rows[0]?.csrf_hash).not.toBe(payload.csrfToken);
     expect((await auth.request('/api/test/protected')).status).toBe(200);
-  });
-
-  it('rejects a device bearer token as an administrator session', async () => {
-    const device = await createDevice('test device', pool);
-    const response = await fetch(`${baseUrl}/api/test/protected`, {
-      headers: { authorization: `Bearer ${device.token}` }, redirect: 'manual',
-    });
-    expect(response.status).toBe(401);
-    expect((await new AuthHttp(baseUrl).login('unused', device.token)).status).toBe(401);
   });
 
   it('uses the same unauthorized response for unknown users and incorrect user Tokens', async () => {

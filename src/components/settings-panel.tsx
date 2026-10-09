@@ -2,10 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, ConfigProvider, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
-import type { DashboardDevice, DashboardDto } from '../contracts/dashboard';
+import { Alert, Button, Card, ConfigProvider, Form, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import type { DashboardDto } from '../contracts/dashboard';
 import CodexLoginForm from './codex-login-form';
-import InstallLinkGenerator from './install-link-generator';
 import { useDashboardPolling } from './use-dashboard-polling';
 import { DISPLAY_TOKEN_PATTERN, normalizeApiOrigin } from '../lib/display-connection';
 import './settings-panel.css';
@@ -23,21 +22,14 @@ async function csrfToken(): Promise<string> {
   return body.csrfToken;
 }
 
-function deviceStatus(device: DashboardDevice) {
-  return device.connection === 'online' ? <Tag color="green">在线</Tag>
-    : device.connection === 'stale' ? <Tag color="orange">待确认</Tag> : <Tag>离线</Tag>;
-}
-
-export default function SettingsPanel({ initial, initialTab = 'accounts' }: { initial: DashboardDto; initialTab?: 'accounts' | 'devices' | 'display' }) {
+export default function SettingsPanel({ initial, initialTab = 'accounts' }: { initial: DashboardDto; initialTab?: 'accounts' | 'display' }) {
   const { data, syncHealthy, refresh, refreshQuota, logout } = useDashboardPolling(initial);
   const [providerForm] = Form.useForm<ProviderValues>();
-  const [deviceForm] = Form.useForm<{ name: string }>();
   const [displayForm] = Form.useForm<DisplayValues>();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [accountMode, setAccountMode] = useState<'api' | 'codex'>('api');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [editing, setEditing] = useState<DashboardDevice | null>(null);
 
   useEffect(() => {
     displayForm.setFieldsValue({
@@ -80,32 +72,13 @@ export default function SettingsPanel({ initial, initialTab = 'accounts' }: { in
     } finally { setSaving(false); }
   }
 
-  async function renameDevice(values: { name: string }) {
-    if (!editing) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const response = await fetch('/api/devices/rename', {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': await csrfToken() },
-        body: JSON.stringify({ id: editing.id, name: values.name.trim() }),
-      });
-      if (!response.ok) throw new Error('保存设备名称失败');
-      setEditing(null);
-      setMessage({ type: 'success', text: '设备名称已保存。' });
-      await refresh();
-    } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : '保存设备名称失败' });
-    } finally { setSaving(false); }
-  }
-
   return <ConfigProvider theme={{ token: { colorPrimary: '#6752da', borderRadius: 7 } }}>
     <main className="settings-page">
       <header className="settings-header">
         <div>
           <Typography.Text type="secondary">CODEX DESK / 管理</Typography.Text>
           <Typography.Title level={2}>设置</Typography.Title>
-          <Typography.Text type="secondary">管理额度账号与采集设备</Typography.Text>
+          <Typography.Text type="secondary">管理 Provider 额度账号与展示页</Typography.Text>
         </div>
         <Space wrap>
           <Link href="/" className="ant-btn ant-btn-default">查看面板</Link>
@@ -115,7 +88,7 @@ export default function SettingsPanel({ initial, initialTab = 'accounts' }: { in
       </header>
 
       {message ? <Alert className="settings-alert" type={message.type} message={message.text} showIcon closable onClose={() => setMessage(null)} /> : null}
-      <Tabs activeKey={activeTab} onChange={key => setActiveTab(key as 'accounts' | 'devices' | 'display')} items={[
+      <Tabs activeKey={activeTab} onChange={key => setActiveTab(key as 'accounts' | 'display')} items={[
         { key: 'accounts', label: '额度账号', children: <div className="settings-grid">
           <Card title="已接入账号">
             <Table rowKey="id" dataSource={data.accounts} pagination={false} scroll={{ x: 650 }}
@@ -147,24 +120,6 @@ export default function SettingsPanel({ initial, initialTab = 'accounts' }: { in
             ]} />
           </Card>
         </div> },
-        { key: 'devices', label: '采集设备', children: <div className="settings-grid">
-          <Card title="设备状态">
-            {data.devices.some(device => device.streamIncomplete) ? <Alert type="warning" showIcon message="有设备报告事件流缺口，请检查采集器队列。" /> : null}
-            <Table rowKey="id" dataSource={data.devices} pagination={false} scroll={{ x: 600 }}
-              locale={{ emptyText: '尚未接入设备' }}
-              columns={[
-                { title: '设备', dataIndex: 'name', key: 'name' },
-                { title: '连接', key: 'connection', render: (_, device) => deviceStatus(device) },
-                { title: '最近上报', dataIndex: 'heartbeatAt', key: 'heartbeatAt', render: value => value ? new Date(value).toLocaleString('zh-CN') : '尚未上报' },
-                { title: '操作', key: 'action', render: (_, device) => <Button size="small" onClick={() => { setEditing(device); deviceForm.setFieldsValue({ name: device.name }); }}>改名</Button> },
-              ]} />
-          </Card>
-          <Card title="接入新设备">
-            <Typography.Paragraph>在目标设备准备 Node.js 24 或更高版本，然后运行一次性安装命令，并在 Codex 的 /hooks 中信任新增 Hooks。</Typography.Paragraph>
-            <Typography.Paragraph>安装授权码 15 分钟有效，只能注册一台设备。安装采集器之前的会话无法回填。</Typography.Paragraph>
-            <InstallLinkGenerator />
-          </Card>
-        </div> },
         { key: 'display', label: '展示连接', children: <Card title="独立展示页" className="settings-display-card">
           <Typography.Paragraph>在此浏览器配置展示页连接。Token 仅保留在当前浏览器会话中；展示页只读取状态，不提供管理操作。</Typography.Paragraph>
           <Form form={displayForm} layout="vertical" onFinish={saveDisplay}>
@@ -174,15 +129,6 @@ export default function SettingsPanel({ initial, initialTab = 'accounts' }: { in
           </Form>
         </Card> },
       ]} />
-
-      <Modal title="修改设备名称" open={Boolean(editing)} onCancel={() => setEditing(null)}
-        onOk={() => void deviceForm.submit()} okText="保存" confirmLoading={saving} destroyOnHidden>
-        <Form form={deviceForm} layout="vertical" onFinish={values => void renameDevice(values)}>
-          <Form.Item name="name" label="设备显示名" rules={[{ required: true, whitespace: true, max: 120 }]}>
-            <Input maxLength={120} />
-          </Form.Item>
-        </Form>
-      </Modal>
     </main>
   </ConfigProvider>;
 }

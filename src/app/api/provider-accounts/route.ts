@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { eventDatabasePool } from '../../../server/events/database';
+import { applicationDatabasePool } from '../../../server/db/application-pool';
 import { createDashboardHandlers } from '../../../server/read-model/handlers';
 import { requireAdmin, verifyCsrf } from '../../../server/auth/session';
 import { readBoundedJson } from '../../../server/auth/request';
@@ -22,11 +22,11 @@ type Prepared = { ok: true; id: string; providerId: ManagedProviderId; label: st
   | { ok: false; error: string };
 
 export async function GET(request: Request): Promise<Response> {
-  return createDashboardHandlers(eventDatabasePool()).accounts(request);
+  return createDashboardHandlers(applicationDatabasePool()).accounts(request);
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const pool = eventDatabasePool();
+  const pool = applicationDatabasePool();
   let admin;
   try { admin = await requireAdmin(request, pool); }
   catch { return Response.json({ error: 'AUTH_UNAVAILABLE' }, { status: 503, headers: NO_STORE }); }

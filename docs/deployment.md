@@ -1,8 +1,8 @@
 # 部署手册：Vercel Web 与远程 Provider Runtime
 
-> 当前自托管部署请使用 [自托管部署说明](self-hosted-deployment.md)。本页保留原 Vercel 部署历史，以下关于用户 Token 入库及浏览器触发额度刷新等描述已不适用于当前自托管版本。
+> 当前自托管部署请使用 [自托管部署说明](self-hosted-deployment.md)。本页是历史 Vercel 部署记录；其中旧设备采集器和会话事件上报流程已经退役。当前产品只追踪各 Provider 的额度，不应按本页部署已退役的 Hook 或设备服务。
 
-Next.js Web/API 部署到 Vercel；托管 PostgreSQL 保存业务状态；独立 Docker Compose Provider Runtime 负责 Codex、DeepSeek、Kimi Code 额度查询。设备事件直接发送给 Vercel API，worker 不读取设备状态，也不依赖 Vercel Cron。Provider Runtime 每秒查询数据库中的到期额度任务，额度刷新成功后按约 5 分钟间隔调度；它不会轮询 Codex 进程或会话。
+历史架构由 Vercel Web/API、托管 PostgreSQL 和独立 Docker Compose Provider Runtime 组成，用于查询 Codex、DeepSeek、Kimi Code 额度。当前运行流程不采集会话或设备事件；Provider Runtime 定时查询到期额度任务。
 
 ## 连接与配置边界
 
@@ -21,14 +21,14 @@ Next.js Web/API 部署到 Vercel；托管 PostgreSQL 保存业务状态；独立
 ## Vercel 部署
 
 1. 从 Git 导入仓库，Project Root Directory 保持仓库根目录，Framework 使用 Next.js 默认配置；仓库内的 `vercel.json` 已声明 `framework: nextjs`。不要设置 `output: standalone`，也不要把 Provider Runtime 当成 Vercel Function。
-2. 在 Vercel 项目环境变量中配置 `APP_ORIGIN` 和 pooled `DATABASE_URL`。登录/CSRF 校验严格匹配固定 `APP_ORIGIN`，不会动态信任请求的 `Host` 或 `VERCEL_URL`。若采集端需要使用不同的稳定域名，可设置 `COLLECTOR_PUBLIC_ORIGIN` 为该 HTTPS origin；安装链接和采集服务地址会使用它，登录仍使用 `APP_ORIGIN`。Production 使用稳定的生产域名；Preview 需绑定稳定的 Preview/branch domain，并为 Preview 环境设置与其完全一致的 `APP_ORIGIN`。不要让每次部署变化的随机 URL 共用 Production origin，也不要设置 `NEXT_PUBLIC_*` 数据库或 Provider 凭据。
+2. 在 Vercel 项目环境变量中配置 `APP_ORIGIN` 和 pooled `DATABASE_URL`。登录/CSRF 校验严格匹配固定 `APP_ORIGIN`，不会动态信任请求的 `Host` 或 `VERCEL_URL`。Production 使用稳定的生产域名；Preview 需绑定稳定的 Preview/branch domain，并为 Preview 环境设置与其完全一致的 `APP_ORIGIN`。不要让每次部署变化的随机 URL 共用 Production origin，也不要设置 `NEXT_PUBLIC_*` 数据库或 Provider 凭据。
 3. 将 Vercel Functions region 与托管数据库 region 对齐，减少数据库往返延迟。Region 需按实际数据库位置在 Vercel 项目设置中选择，本仓库不猜测具体区域。
-4. 每次需要新增 schema 时，从受限的发布环境显式运行 `npm run db:migrate`，该命令使用 `DATABASE_DIRECT_URL`。设备一键注册需要 migration `004-device-registration.sql` 和 Vercel Production secret `DEVICE_REGISTRATION_SECRET`（至少 32 个随机字节）；不要把 migration 隐式放进 Web Function 冷启动。
-5. 首次发布后访问 `https://<面板域名>/api/health`。它只返回 `{ "ok": true }`，用于进程存活探测，不回显数据库错误或环境变量。完成管理员初始化后，测试登录、设备上报和面板读取。
+4. 每次需要新增 schema 时，从受限的发布环境显式运行 `npm run db:migrate`，该命令使用 `DATABASE_DIRECT_URL`；不要把 migration 隐式放进 Web Function 冷启动。
+5. 首次发布后访问 `https://<面板域名>/api/health`。它只返回 `{ "ok": true }`，用于进程存活探测，不回显数据库错误或环境变量。完成管理员初始化后，检查登录和 Provider 额度读取。
 
 面板的“添加账号”入口可一次录入多个 DeepSeek 或 Kimi Code 中国站 API 账号；Web 服务分别调用 DeepSeek 余额接口或 Kimi Code 中国站用量接口，成功账号的 API Key 加密保存在 `provider_credentials` 表，失败账号会在表单中逐行显示原因。选择“登录 Codex”时，Provider Runtime 使用官方设备码流程生成验证网址和一次性代码，管理员在 ChatGPT 页面完成授权；该功能要求在个人安全设置或工作区权限中启用设备码登录。OAuth 凭据仅保留在 Provider Runtime 授权卷，Web 与数据库只接收登录状态和额度。设备码不可用时可按下文继续使用 CLI 登录。页面可见时每分钟检查一次 API 账号，距上次尝试超过 5 分钟便请求更新；手动刷新也会直接请求 API。Kimi Code 中国站使用 `https://api.kimi.com/coding/v1/usages`，按返回的窗口与套餐用量展示，不从重置时间猜测套餐周期。Provider Runtime 继续管理配置文件中的账号，不会停用面板新增的账号。
 
-面板 API 使用普通短请求，浏览器页面可见时每 10 秒读取一次最新快照，页面隐藏时暂停；这不创建常驻 Vercel Function，也不需要 PostgreSQL `LISTEN` 连接。设备 Hook 仍通过事件 API 主动上报，额度刷新每 5 分钟由远程 Provider Runtime 完成，不建立 5 分钟 Vercel Cron。Vercel Cron 的频率依计划类型受限，且无论如何不应承载需要持久 CLI 登录目录的工作进程。
+面板 API 使用普通短请求，浏览器页面可见时定期读取最新额度快照，页面隐藏时暂停；这不创建常驻 Vercel Function，也不需要 PostgreSQL `LISTEN` 连接。额度刷新由远程 Provider Runtime 完成，不建立 Vercel Cron，也不承载会话采集或 Hook 上报。
 
 ## Provider Runtime 准备
 
@@ -128,10 +128,9 @@ set +a
 npm ci
 npm run db:migrate
 npm run admin:create -- --output=/private/path/dashboard-user-token.txt
-npm run device:create -- 'MacBook Pro'
 ```
 
-`admin:create` 生成 8 位随机用户 Token 并保存到指定的 0600 文件；登录页仅输入此 Token。轮换时将新 Token 放入私有配置并重启服务；旧管理会话立即失效，数据库中的账号、设备、额度与事件数据不受影响。数据库沿用原凭据哈希字段保存 scrypt 哈希，不保存明文 Token；`device:create` 只显示一次设备 token。将 token 安全配置到每台采集端，不要粘贴到截图、聊天或日志。worker 日志不显示上游响应正文和凭据；Compose 也限制日志轮替。可用以下命令查看服务是否运行：
+`admin:create` 生成 8 位随机用户 Token 并保存到指定的 0600 文件；登录页仅输入此 Token。轮换时将新 Token 放入私有配置并重启服务；旧管理会话立即失效，数据库中的 Provider 账号和额度快照不受影响。数据库沿用原凭据哈希字段保存 scrypt 哈希，不保存明文 Token。worker 日志不显示上游响应正文和凭据；Compose 也限制日志轮替。可用以下命令查看服务是否运行：
 
 ```sh
 docker compose --env-file .env -f deploy/compose.provider-runtime.yaml ps
@@ -157,7 +156,7 @@ BACKUP_DIR=/mnt/encrypted-backups/codex-dashboard \
   scripts/backup.sh
 ```
 
-脚本短暂停止运行中的 Provider Runtime，以便授权卷文件稳定；数据库 dump 使用 PostgreSQL 一致性快照，设备事件仍可继续进入 Vercel/API。结束时脚本会尝试恢复 worker。归档解密密钥和授权人员应与运行主机分离管理。
+脚本短暂停止运行中的 Provider Runtime，以便授权卷文件稳定；数据库 dump 使用 PostgreSQL 一致性快照。结束时脚本会尝试恢复 worker。归档解密密钥和授权人员应与运行主机分离管理。
 
 恢复必须先创建一个全新、空的隔离数据库，名称以 `_restore`、`_test` 或 `_staging` 结尾。恢复脚本要求显式确认；它检查目标无应用表，使用单事务导入且不执行 `--clean` / `DROP DATABASE`，最后核对数据库中迁移版本与当前 checkout 完全一致。运行用户需能读写目标 DB。配置与授权文件只解压到一个新的受限目录，脚本不会覆盖生产配置或挂载正在运行的 volume：
 
@@ -168,7 +167,7 @@ RESTORE_OUTPUT_DIR=/mnt/restore-check/provider-runtime \
   scripts/restore.sh /mnt/encrypted-backups/codex-dashboard/codex-status-dashboard-<timestamp>.tar.gz
 ```
 
-恢复目标中应能查询既有设备、会话、账号和额度快照。手工检查隔离目录中的配置与授权，再按受控运维变更将其挂载到新的 Provider Runtime。恢复输出与源归档同样包含秘密，应限制访问并在验证结束后按保留策略销毁。
+恢复目标中应能查询既有 Provider 账号和额度快照。旧数据库中可能仍有已退役的设备、会话事件表及其历史数据，这些数据不参与当前应用运行。手工检查隔离目录中的配置与授权，再按受控运维变更将其挂载到新的 Provider Runtime。恢复输出与源归档同样包含秘密，应限制访问并在验证结束后按保留策略销毁。
 
 ## 限制和官方资料
 
@@ -176,6 +175,6 @@ RESTORE_OUTPUT_DIR=/mnt/restore-check/provider-runtime \
 - Kimi Code CLI 已使用当前的 [Kimi Code CLI 安装指南](https://moonshotai.github.io/kimi-code/en/guides/getting-started) 与 [命令参考](https://moonshotai.github.io/kimi-code/en/reference/kimi-command.html)，没有沿用已归档的旧 `kimi-cli` 安装文档。官方文档确认 `kimi web --no-open --host 127.0.0.1` 与持久 token 文件路径。
 - 镜像关闭 Kimi CLI 自动更新以保证锁定版本；参考官方 [Kimi Code 环境变量文档](https://moonshotai.github.io/kimi-code/en/configuration/env-vars.html)。
 - [Kimi Server API](https://moonshotai.github.io/kimi-code/en/reference/server-api.html) 标记为 experimental，虽然列出 `/api/v1/oauth/usage` 和 usage schema，仍需在目标远程 Linux Runtime 上验证精确版本、真实 Kimi Code OAuth、server bearer token、挂载路径和响应合约。该真实账号探测目前为 **NOT_RUN**。
-- Vercel 的 [静态项目配置](https://vercel.com/docs/project-configuration/vercel-json) 与 [Cron 使用限制](https://vercel.com/docs/cron-jobs/usage-and-pricing) 解释了本项目为何让 Vercel 承担短请求与事件 API，而让独立常驻 Runtime 调度 5 分钟额度刷新。
+- 当前项目只使用 Web/API 管理 Provider 账号和展示额度，由独立常驻 Runtime 调度额度刷新。
 
 真实 Vercel 项目、托管数据库账户、Provider 主机和远端 Provider 账号未在此提交中创建或验证；见 [部署验收记录](./acceptance.md)。

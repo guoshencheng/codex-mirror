@@ -6,8 +6,6 @@ import { DASHBOARD_POLL_INTERVAL_MS } from './pixel-dashboard-model';
 
 const EMPTY_DASHBOARD: DashboardDto = {
   generatedAt: new Date(0).toISOString(),
-  devices: [],
-  sessions: [],
   accounts: [],
 };
 const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
@@ -28,13 +26,6 @@ export interface DashboardPollingValue {
 
 function defaultNavigate(path: string): void {
   window.location.assign(path);
-}
-
-function deviceConnection(heartbeatAt: string | null, nowMilliseconds: number): DashboardDto['devices'][number]['connection'] {
-  if (!heartbeatAt) return 'offline';
-  const age = Math.max(0, nowMilliseconds - Date.parse(heartbeatAt)) / 1_000;
-  if (!Number.isFinite(age) || age >= 120) return 'offline';
-  return age >= 60 ? 'stale' : 'online';
 }
 
 export function useDashboardPolling(initial: DashboardDto, options: DashboardPollingOptions = {}): DashboardPollingValue {
@@ -199,7 +190,6 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
     alive.current = true;
     redirected.current = false;
     let dashboardTimer: ReturnType<typeof setInterval> | undefined;
-    let freshnessTimer: ReturnType<typeof setInterval> | undefined;
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'hidden') void refresh();
     };
@@ -212,20 +202,12 @@ export function useDashboardPolling(initial: DashboardDto, options: DashboardPol
       document.addEventListener('visibilitychange', onVisibilityChange);
     }
     const clockTimer = setInterval(() => setNow(new Date()), 1_000);
-    if (!readOnly) freshnessTimer = setInterval(() => {
-      const at = Date.now();
-      setData(previous => ({
-        ...previous,
-        devices: previous.devices.map(device => ({ ...device, connection: deviceConnection(device.heartbeatAt, at) })),
-      }));
-    }, 10_000);
 
     return () => {
       alive.current = false;
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (dashboardTimer) clearInterval(dashboardTimer);
       clearInterval(clockTimer);
-      if (freshnessTimer) clearInterval(freshnessTimer);
     };
   }, [readOnly, refresh, renewCsrf]);
 

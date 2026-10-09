@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eventDatabasePool } from '../../../../server/events/database';
+import { applicationDatabasePool } from '../../../../server/db/application-pool';
 import { requireAdmin, verifyCsrf } from '../../../../server/auth/session';
 import { readBoundedJson } from '../../../../server/auth/request';
 import { CodexLoginRepository, publicCodexLogin } from '../../../../server/providers/codex/login-repository';
@@ -10,7 +10,7 @@ const NO_STORE = { 'Cache-Control': 'private, no-store' };
 const input = z.object({ label: z.string().trim().min(1).max(120) }).strict();
 
 export async function GET(request: Request): Promise<Response> {
-  const pool = eventDatabasePool();
+  const pool = applicationDatabasePool();
   try {
     const admin = await requireAdmin(request, pool);
     if (!admin) return Response.json({ error: 'UNAUTHORIZED' }, { status: 401, headers: NO_STORE });
@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const pool = eventDatabasePool();
+  const pool = applicationDatabasePool();
   let admin;
   try { admin = await requireAdmin(request, pool); }
   catch { return Response.json({ error: 'AUTH_UNAVAILABLE' }, { status: 503, headers: NO_STORE }); }

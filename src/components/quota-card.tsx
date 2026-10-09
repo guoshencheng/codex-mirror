@@ -33,11 +33,10 @@ export default function QuotaCard({ account, now, onRefresh, readOnly = false, h
 
   return <article className="ds-card ds-quota-card" aria-label={`${account.label}额度`}>
     <header className="ds-card__header">
-      <div className="ds-stack">
-        <span className="ds-section-label">{account.providerId}</span>
-        <h2 className="ds-card__title">{account.label}</h2>
-        <span className="ds-meta">关联 {account.deviceIds.length} 台设备</span>
-      </div>
+        <div className="ds-stack">
+          <span className="ds-section-label">{account.providerId}</span>
+          <h2 className="ds-card__title">{account.label}</h2>
+        </div>
       <span className={`ds-status ${busy ? 'ds-status--waiting' : 'ds-status--muted'}`}>
         {refreshStatusText[account.refreshStatus]}
       </span>

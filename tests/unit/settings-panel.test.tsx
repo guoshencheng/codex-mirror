@@ -12,7 +12,7 @@ vi.mock('../../src/components/use-dashboard-polling', () => ({
   }),
 }));
 
-const initial: DashboardDto = { generatedAt: new Date().toISOString(), devices: [], sessions: [], accounts: [] };
+const initial: DashboardDto = { generatedAt: new Date().toISOString(), accounts: [] };
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class {

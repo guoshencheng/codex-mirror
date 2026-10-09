@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const snapshot = { generatedAt: '2026-09-23T00:00:00.000Z', devices: [], sessions: [], accounts: [] };
+const snapshot = { generatedAt: '2026-09-23T00:00:00.000Z', accounts: [] };
 vi.mock('../../src/server/read-model/dashboard', () => ({ getDashboard: vi.fn(async () => snapshot) }));
 import { GET, OPTIONS } from '../../src/app/api/display/dashboard/route';
 

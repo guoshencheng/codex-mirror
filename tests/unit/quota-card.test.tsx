@@ -12,7 +12,6 @@ const account: DashboardAccount = {
   id: 'account-codex',
   providerId: 'codex',
   label: 'Codex',
-  deviceIds: [],
   snapshot: {
     accountId: 'account-codex',
     providerId: 'codex',

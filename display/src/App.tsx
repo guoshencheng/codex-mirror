@@ -8,7 +8,7 @@ import '../../src/app/globals.css';
 import './style.css';
 
 const DEFAULT_ORIGIN = 'https://codex-status.icerock.top';
-const EMPTY: DashboardDto = { generatedAt: new Date(0).toISOString(), devices: [], sessions: [], accounts: [] };
+const EMPTY: DashboardDto = { generatedAt: new Date(0).toISOString(), accounts: [] };
 
 function savedToken(): string | null {
   try {
