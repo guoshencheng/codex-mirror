@@ -28,7 +28,7 @@
 
 面板的“添加账号”入口可一次录入多个 DeepSeek 或 Kimi Code 中国站 API 账号；Web 服务分别调用 DeepSeek 余额接口或 Kimi Code 中国站用量接口，成功账号的 API Key 加密保存在 `provider_credentials` 表，失败账号会在表单中逐行显示原因。选择“登录 Codex”时，Provider Runtime 使用官方设备码流程生成验证网址和一次性代码，管理员在 ChatGPT 页面完成授权；该功能要求在个人安全设置或工作区权限中启用设备码登录。OAuth 凭据仅保留在 Provider Runtime 授权卷，Web 与数据库只接收登录状态和额度。设备码不可用时可按下文继续使用 CLI 登录。页面可见时每分钟检查一次 API 账号，距上次尝试超过 5 分钟便请求更新；手动刷新也会直接请求 API。Kimi Code 中国站使用 `https://api.kimi.com/coding/v1/usages`，按返回的窗口与套餐用量展示，不从重置时间猜测套餐周期。Provider Runtime 继续管理配置文件中的账号，不会停用面板新增的账号。
 
-面板 API 使用普通短请求，浏览器页面可见时定期读取最新额度快照，页面隐藏时暂停；这不创建常驻 Vercel Function，也不需要 PostgreSQL `LISTEN` 连接。额度刷新由远程 Provider Runtime 完成，不建立 Vercel Cron，也不承载会话采集或 Hook 上报。
+面板 API 使用普通短请求，浏览器页面可见时每 10 秒读取最新额度快照，页面隐藏时暂停；这不创建常驻 Vercel Function，也不需要 PostgreSQL `LISTEN` 连接。额度刷新由远程 Provider Runtime 完成，不建立 Vercel Cron，也不承载会话采集或 Hook 上报。
 
 ## Provider Runtime 准备
 

@@ -57,7 +57,7 @@ describe('compact pixel dashboard', () => {
       { kind: 'quota-window', key: 'weekly', label: 'Weekly', usedPercent: 59, windowDurationSeconds: 604800, resetsAt: null },
       { kind: 'quota-window', key: 'extra', label: 'Additional', usedPercent: 10, windowDurationSeconds: null, resetsAt: null },
     ]; snapshot.accounts = [wallet];
-    render(<Dashboard initial={snapshot} />);
+    render(<Dashboard initial={snapshot} readOnly />);
     const walletButton = screen.getByRole('button', { name: '查看 Wallet account 额度详情' });
     expect(screen.queryByText('点击账号查看额度历史')).not.toBeInTheDocument();
     expect(screen.queryByText(/历史/)).not.toBeInTheDocument();
