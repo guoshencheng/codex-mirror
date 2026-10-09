@@ -1,11 +1,10 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
-import { createDevice } from '../../src/server/events/devices';
 
 const TEST_PASSWORD = 'cdu_' + 'a'.repeat(43);
 
@@ -19,8 +18,6 @@ function testConnectionString(): string {
 async function main(): Promise<void> {
   const databaseUrl = testConnectionString();
   const schema = `e2e_${randomUUID().replaceAll('-', '')}`;
-  const fixtureFile = process.env.E2E_FIXTURE_FILE;
-  if (!fixtureFile) throw new Error('E2E_FIXTURE_FILE_REQUIRED');
   const port = process.env.E2E_PORT ?? '3119';
   const origin = process.env.APP_ORIGIN ?? `http://127.0.0.1:${port}`;
   const migrationDir = fileURLToPath(new URL('../../migrations/', import.meta.url));
@@ -42,7 +39,6 @@ async function main(): Promise<void> {
       await app.query(await readFile(resolve(migrationDir, migration), 'utf8'));
     }
     await writeFile(tokenFile, `${TEST_PASSWORD}\n`, { mode: 0o600 });
-    const device = await createDevice('Playwright test device', app);
     const accountId = 'e2e-history-account';
     await app.query(`INSERT INTO provider_accounts(id, provider_id, label, credential_ref, options)
       VALUES ($1, 'fake', 'E2E 历史账号', 'unused', '{}'::jsonb)`, [accountId]);
@@ -55,8 +51,6 @@ async function main(): Promise<void> {
     const samples = [snapshot(observedAt(60), 20), snapshot(observedAt(30), 65), snapshot(observedAt(10), 5)];
     await app.query('INSERT INTO quota_latest(account_id, snapshot) VALUES ($1, $2::jsonb)', [accountId, JSON.stringify(samples.at(-1))]);
     for (const sample of samples) await app.query('INSERT INTO quota_snapshots(account_id, observed_at, snapshot) VALUES ($1, $2, $3::jsonb)', [accountId, sample.observedAt, JSON.stringify(sample)]);
-    await writeFile(fixtureFile, JSON.stringify({ deviceId: device.id, deviceToken: device.token, epoch: randomUUID(), accountId }), { mode: 0o600 });
-
     child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', port], {
       cwd: projectRoot,
       env: {
@@ -88,7 +82,6 @@ async function main(): Promise<void> {
     await app?.end();
     await owner.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await owner.end();
-    await unlink(fixtureFile).catch(() => undefined);
     await rm(tokenDirectory, { recursive: true, force: true });
   }
 }

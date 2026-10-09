@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '../../src/components/dashboard';
-import type { DashboardAccount, DashboardDto, DashboardSession } from '../../src/contracts/dashboard';
+import type { DashboardAccount, DashboardDto } from '../../src/contracts/dashboard';
 import type { QuotaHistoryLoader } from '../../src/contracts/quota-history';
 
 const transport = vi.hoisted(() => ({ syncHealthy: true, refresh: vi.fn(), refreshQuota: vi.fn(), logout: vi.fn() }));
@@ -13,64 +13,27 @@ vi.mock('../../src/components/use-dashboard-polling', () => ({
 afterEach(() => { cleanup(); transport.syncHealthy = true; vi.clearAllMocks(); });
 const time = '2026-09-22T10:00:00Z';
 function account(id: string): DashboardAccount {
-  return { id, providerId: id, label: `${id} account`, deviceIds: [], lastAttemptAt: time, lastSuccessAt: time,
+  return { id, providerId: id, label: `${id} account`, lastAttemptAt: time, lastSuccessAt: time,
     errorCode: null, refreshStatus: 'idle', snapshot: { accountId: id, providerId: id, observedAt: time, serviceAvailable: true,
       metrics: [{ kind: 'quota-window', key: '5h', label: '5H', usedPercent: 28, windowDurationSeconds: 18000, resetsAt: null }] } };
 }
-function session(id: string, state: DashboardSession['state'] = 'WORKING'): DashboardSession {
-  return { id, deviceId: 'device', title: `Task ${id}`, harness: 'codex', clientType: null, state, confidence: 'confirmed', projectId: 'project', projectName: 'Project',
-    lastEventAt: time, lastReceivedAt: time, turnStartedAt: time, currentTool: null };
-}
 function data(): DashboardDto {
-  return { generatedAt: time, devices: [{ id: 'device', name: 'Mac mini', heartbeatAt: time, connection: 'online', streamIncomplete: false }],
-    accounts: ['OpenAI', 'Anthropic', 'MiniMax', 'Other'].map(account),
-    sessions: [...Array.from({ length: 7 }, (_, i) => session(String(i))), session('approval', 'WAITING_APPROVAL')] };
+  return { generatedAt: time, accounts: ['OpenAI', 'Anthropic', 'MiniMax', 'Other', ...Array.from({ length: 6 }, (_, i) => `Provider ${i + 4}`)].map(account) };
 }
 
 describe('compact pixel dashboard', () => {
-  it('keeps multiple providers visible and makes overflow accounts and sessions reachable', () => {
+  it('keeps provider accounts visible and makes overflow accounts reachable', () => {
     const { rerender } = render(<Dashboard initial={data()} />);
     const providers = screen.getByRole('list', { name: 'Provider 额度' });
-    expect(within(providers).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(providers).getAllByRole('listitem')).toHaveLength(9);
     expect(within(providers).getByText('OpenAI')).toBeInTheDocument();
     expect(within(providers).getByText('Anthropic')).toBeInTheDocument();
     expect(within(providers).getByText('MiniMax')).toBeInTheDocument();
-    const sessions = screen.getByRole('list', { name: '会话' });
-    expect(within(sessions).getAllByRole('listitem')).toHaveLength(6);
-    expect(within(sessions).getAllByRole('heading')[0]).toHaveTextContent('Task approval');
     fireEvent.click(screen.getByRole('button', { name: '下一页额度' }));
-    expect(within(providers).getByText('Other')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '下一页会话' }));
-    expect(within(sessions).getByText('Task 6')).toBeInTheDocument();
-    const smaller = data(); smaller.accounts = [account('OpenAI')]; smaller.sessions = [session('0')];
+    expect(within(providers).getByText('Provider 9')).toBeInTheDocument();
+    const smaller = data(); smaller.accounts = [account('OpenAI')];
     rerender(<Dashboard initial={smaller} />);
     expect(within(providers).getByText('OpenAI')).toBeInTheDocument();
-    expect(within(sessions).getByText('Task 0')).toBeInTheDocument();
-  });
-
-  it('shows at most two pages of sessions', () => {
-    const snapshot = data();
-    snapshot.sessions = Array.from({ length: 13 }, (_, i) => session(String(i)));
-    render(<Dashboard initial={snapshot} />);
-    const list = screen.getByRole('list', { name: '会话' });
-    expect(screen.getByLabelText('会话页码')).toHaveTextContent('1/2');
-    fireEvent.click(screen.getByRole('button', { name: '下一页会话' }));
-    expect(screen.getByLabelText('会话页码')).toHaveTextContent('2/2');
-    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
-    expect(within(list).queryByText('Task 12')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '下一页会话' })).toBeDisabled();
-  });
-
-  it.each(['offline', 'unconfirmed', 'incomplete', 'disconnected'])('does not present %s task state as current activity', reason => {
-    const snapshot = data(); snapshot.sessions = [session('old')];
-    if (reason === 'offline') snapshot.devices[0].connection = 'offline';
-    if (reason === 'unconfirmed') snapshot.sessions[0].confidence = 'unconfirmed';
-    if (reason === 'incomplete') snapshot.devices[0].streamIncomplete = true;
-    if (reason === 'disconnected') transport.syncHealthy = false;
-    render(<Dashboard initial={snapshot} />);
-    expect(screen.getByText('最近：执行中')).toBeInTheDocument();
-    expect(screen.queryByText(/1 个任务执行中/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '正在工作' })).not.toBeInTheDocument();
   });
 
   it('shows unknown quota as unavailable and stale or failed snapshots as last-known values', () => {
@@ -103,7 +66,7 @@ describe('compact pixel dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Additional' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刷新额度' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '返回面板' }));
-    expect(screen.getByRole('list', { name: '会话' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Provider 额度' })).toBeInTheDocument();
   });
 
   it('loads injected quota history only after opening details and keeps the card read-only', async () => {

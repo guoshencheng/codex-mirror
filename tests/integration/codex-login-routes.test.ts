@@ -6,7 +6,7 @@ import { createAdminSession } from '../../src/server/auth/session';
 import { sessionCookieName } from '../../src/server/auth/cookie';
 
 const holder = vi.hoisted(() => ({ pool: null as Pool | null }));
-vi.mock('../../src/server/events/database', () => ({ eventDatabasePool: () => holder.pool }));
+vi.mock('../../src/server/db/application-pool', () => ({ applicationDatabasePool: () => holder.pool }));
 import { GET as GET_ACTIVE, POST } from '../../src/app/api/provider-accounts/codex-login/route';
 import { GET, DELETE } from '../../src/app/api/provider-accounts/codex-login/[id]/route';
 

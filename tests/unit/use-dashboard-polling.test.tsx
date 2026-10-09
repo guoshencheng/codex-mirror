@@ -8,10 +8,6 @@ import { useDashboardPolling } from '../../src/components/use-dashboard-polling'
 
 const initial: DashboardDto = {
   generatedAt: '2026-09-22T12:00:00.000Z',
-  devices: [{
-    id: 'device-1', name: 'Mac', heartbeatAt: '2026-09-22T11:59:10.000Z', connection: 'online', streamIncomplete: false,
-  }],
-  sessions: [],
   accounts: [],
 };
 
@@ -19,7 +15,6 @@ function Harness({ navigate }: { navigate(path: string): void }) {
   const { data, syncHealthy, now, refreshQuota, logout } = useDashboardPolling(initial, { navigate });
   return <main>
     <output aria-label="sync state">{syncHealthy ? 'connected' : 'disconnected'}</output>
-    <output aria-label="device connection">{data.devices[0]?.connection ?? 'none'}</output>
     <output aria-label="generated at">{data.generatedAt}</output>
     <output aria-label="clock">{now.toISOString()}</output>
     <button onClick={() => void refreshQuota('account-1')}>refresh quota</button>
@@ -98,7 +93,7 @@ describe('useDashboardPolling', () => {
   it('leaves scheduled managed account refreshes to the worker', async () => {
     vi.useFakeTimers();
     const account = {
-      id: 'api_kimi', providerId: 'kimi-code-cn', label: 'Kimi', deviceIds: [], snapshot: null,
+      id: 'api_kimi', providerId: 'kimi-code-cn', label: 'Kimi', snapshot: null,
       lastAttemptAt: new Date(Date.now() - 360_000).toISOString(), lastSuccessAt: null,
       errorCode: null, refreshStatus: 'idle' as const,
     };
@@ -261,23 +256,6 @@ describe('useDashboardPolling', () => {
     expect(screen.getByLabelText('sync state')).toHaveTextContent('connected');
   });
 
-  it('updates device freshness and elapsed clock locally between dashboard polls', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-22T12:00:00.000Z'));
-    const fetchMock = vi.mocked(fetch);
-    const navigate = vi.fn();
-    render(<Harness navigate={navigate} />);
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByLabelText('device connection')).toHaveTextContent('online');
-    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/dashboard')).toHaveLength(1);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
-    expect(screen.getByLabelText('device connection')).toHaveTextContent('stale');
-    expect(screen.getByLabelText('clock')).toHaveTextContent('12:00:10');
-    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/dashboard')).toHaveLength(2);
-    expect(navigate).not.toHaveBeenCalled();
-  });
-
   it('sends the current CSRF token when manually requesting a quota refresh', async () => {
     const fetchMock = vi.mocked(fetch);
     let dashboardReads = 0;
@@ -349,7 +327,6 @@ describe('useDashboardPolling', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login'));
 
     expect(screen.getByLabelText('generated at')).toHaveTextContent('1970-01-01');
-    expect(screen.getByLabelText('device connection')).toHaveTextContent('none');
     expect(screen.getByLabelText('sync state')).toHaveTextContent('disconnected');
   });
 });

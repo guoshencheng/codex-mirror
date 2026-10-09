@@ -44,7 +44,7 @@ jobs:
           npm test
           npm run typecheck
 
-      - name: Build web and collector package
+      - name: Build web and display
         env:
           NODE_OPTIONS: --max-old-space-size=2048
         run: |
@@ -57,8 +57,6 @@ jobs:
           RELEASE_ID="${GITHUB_SHA:0:12}-run${GITHUB_RUN_ID}-a${GITHUB_RUN_ATTEMPT}"
           ARCHIVE="$RUNNER_TEMP/codex-dashboard-release.tar.gz"
           test -s .next/BUILD_ID
-          test -s public/collector/collector.tar.gz
-          test -s public/collector/collector.sha256
           test -s dist-display/index.html
           test -f deploy/self-hosted/activate.mjs
           tar \
@@ -74,8 +72,6 @@ jobs:
             -czf "$ARCHIVE" .
           tar -tzf "$ARCHIVE" > "$RUNNER_TEMP/release-files.txt"
           grep -Fxq './.next/BUILD_ID' "$RUNNER_TEMP/release-files.txt"
-          grep -Fxq './public/collector/collector.tar.gz' "$RUNNER_TEMP/release-files.txt"
-          grep -Fxq './public/collector/collector.sha256' "$RUNNER_TEMP/release-files.txt"
           grep -Fxq './dist-display/index.html' "$RUNNER_TEMP/release-files.txt"
           grep -Fxq './deploy/self-hosted/activate.mjs' "$RUNNER_TEMP/release-files.txt"
           (cd "$RUNNER_TEMP" && sha256sum codex-dashboard-release.tar.gz > codex-dashboard-release.tar.gz.sha256)
@@ -116,10 +112,9 @@ jobs:
           trap 'rm -rf -- "$STAGING"' EXIT
           tar --no-same-owner -xzf codex-dashboard-release.tar.gz -C "$STAGING"
           test -s "$STAGING/.next/BUILD_ID"
-          test -s "$STAGING/public/collector/collector.tar.gz"
           test -s "$STAGING/dist-display/index.html"
           # tt 每次部署都完整安装依赖,不构建、不复用旧 node_modules;
-          # .next、dist-display 与 collector 包都来自发布包。
+          # .next 与 dist-display 都来自发布包。
           # 依赖树由发布包里的 package-lock.json 决定,与 GitHub 上 npm ci 的结果一致;
           # npm 经 mihomo 代理出站,用内存上限把 OOM 风险挡在激活之前(该机无 swap)。
           SEED="/opt/codex-status-dashboard/pm2-releases/.seed"

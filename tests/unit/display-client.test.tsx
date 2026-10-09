@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeApiOrigin, useDisplaySnapshot } from '../../display/src/api';
 
-const snapshot = { generatedAt: '2026-09-23T00:00:00.000Z', devices: [], sessions: [], accounts: [] };
+const snapshot = { generatedAt: '2026-09-23T00:00:00.000Z', accounts: [] };
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 

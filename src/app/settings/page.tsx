@@ -11,5 +11,5 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const admin = await requireAdmin(new Request('http://dashboard.internal/settings', { headers: { cookie: cookieHeader } }));
   if (!admin) redirect('/login');
   const { tab } = await searchParams;
-  return <SettingsPanel initial={await getDashboard()} initialTab={tab === 'devices' || tab === 'display' ? tab : 'accounts'} />;
+  return <SettingsPanel initial={await getDashboard()} initialTab={tab === 'display' ? tab : 'accounts'} />;
 }

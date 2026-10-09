@@ -1,4 +1,4 @@
-import { eventDatabasePool } from '../../../../../server/events/database';
+import { applicationDatabasePool } from '../../../../../server/db/application-pool';
 import { requireAdmin, verifyCsrf } from '../../../../../server/auth/session';
 import { CodexLoginRepository, publicCodexLogin } from '../../../../../server/providers/codex/login-repository';
 
@@ -8,7 +8,7 @@ const NO_STORE = { 'Cache-Control': 'private, no-store' };
 type Context = { params: Promise<{ id: string }> };
 
 async function getAuthorized(request: Request, context: Context) {
-  const pool = eventDatabasePool();
+  const pool = applicationDatabasePool();
   const admin = await requireAdmin(request, pool);
   if (!admin) return { error: Response.json({ error: 'UNAUTHORIZED' }, { status: 401, headers: NO_STORE }) };
   const { id } = await context.params;

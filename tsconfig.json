@@ -34,7 +34,6 @@
     ".next/dev/types/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
-    "collector/**/*.ts",
     "scripts/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx"

@@ -6,8 +6,7 @@ export { normalizeApiOrigin } from '../../src/lib/display-connection';
 function isDashboard(value: unknown): value is DashboardDto {
   if (!value || typeof value !== 'object') return false;
   const data = value as Partial<DashboardDto>;
-  return typeof data.generatedAt === 'string' && Array.isArray(data.devices) &&
-    Array.isArray(data.sessions) && Array.isArray(data.accounts);
+  return typeof data.generatedAt === 'string' && Array.isArray(data.accounts);
 }
 
 export function useDisplaySnapshot(apiOrigin: string | null, token: string | null) {

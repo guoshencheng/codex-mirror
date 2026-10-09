@@ -1,10 +1,10 @@
 # Provider 接口验证记录
 
-日期：2026-09-22。以下区分本地 CLI/协议验证与远程账号实测；未将本机账号用作远程服务凭据。
+更新日期：2026-10-10。以下区分当前代码路径、本地 CLI/协议验证与远程账号实测；未将本机账号用作远程服务凭据。
 
 ## 本机运行时信息（不含账号数据）
 
-- Codex CLI：`codex-cli 0.146.0`。`codex app-server --help` 声明默认 stdio transport。协议以临时空 `CODEX_HOME` 生成的 JSON Schema 核对，包含 `initialize`、`initialized`、`account/rateLimits/read`、`account/rateLimits/updated`。
+- Codex 额度读取使用服务端 HTTP 请求 `GET https://chatgpt.com/backend-api/wham/usage`，从 `CODEX_RUNTIME_ROOT/<accountId>/auth.json` 读取 OAuth 凭据；遇到 401 时使用 refresh token 更新凭据并原子写回文件。额度查询不启动 `codex app-server`。网页中的 Codex 设备码授权仍使用 `login-rpc.ts` 的 app-server 流程。
 - Kimi Code CLI：`2.0.2`。部署镜像使用当前官方 npm 包 `@moonshot-ai/kimi-code@2.0.2`，由它提供 `kimi` 命令。官方命令参考确认 `kimi web --no-open --host 127.0.0.1` 可用；`kimi web` 默认 loopback、端口 58627，并以 bearer token 保护 API。`kimi web rotate-token` 把持久 token 写到 `~/.kimi-code/server.token`。本机仅查询版本和帮助，未轮换本机 token；实现不使用 `--dangerous-bypass-auth`。
 - 当前 [Kimi Code Server API 文档](https://moonshotai.github.io/kimi-code/en/reference/server-api.html) 声明 `/api/*` 需 bearer token，`GET /api/v1/oauth/usage` 返回 `kind: ok|error` 和 quota/extraUsage 数据；官方将 CLI REST/WebSocket API 标为 experimental，部署端需锁定版本并校验契约样本。旧 `MoonshotAI/kimi-cli` 仓库已归档，不再用作安装依据。
 - DeepSeek 官方文档 `GET /user/balance` 返回 `is_available` 和 `balance_infos`，其中金额为十进制字符串并含币种。
@@ -20,7 +20,6 @@
 ## 资料
 
 - [Codex App Server](https://learn.chatgpt.com/docs/app-server)
-- [Codex Hooks](https://learn.chatgpt.com/docs/hooks)
 - [DeepSeek Get User Balance](https://api-docs.deepseek.com/api/get-user-balance/)
 - [Kimi Code CLI 安装](https://moonshotai.github.io/kimi-code/en/guides/getting-started)
 - [Kimi Code CLI 命令参考](https://moonshotai.github.io/kimi-code/en/reference/kimi-command.html)

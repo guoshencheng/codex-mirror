@@ -9,7 +9,7 @@ import { QuotaRepository } from '../../src/server/quota/repository';
 import { refreshDueAccountsOnce } from '../../src/worker/main';
 
 const holder = vi.hoisted(() => ({ pool: null as Pool | null }));
-vi.mock('../../src/server/events/database', () => ({ eventDatabasePool: () => holder.pool }));
+vi.mock('../../src/server/db/application-pool', () => ({ applicationDatabasePool: () => holder.pool }));
 import { POST } from '../../src/app/api/provider-accounts/route';
 
 const oldOrigin = process.env.APP_ORIGIN;

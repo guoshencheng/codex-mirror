@@ -1,9 +1,9 @@
 import type { Pool } from 'pg';
-import { createDatabasePool } from '../db/pool';
+import { createDatabasePool } from './pool';
 
 let pool: Pool | undefined;
 
-export function eventDatabasePool(): Pool {
+export function applicationDatabasePool(): Pool {
   pool ??= createDatabasePool();
   return pool;
 }

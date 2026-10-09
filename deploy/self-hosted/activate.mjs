@@ -48,7 +48,7 @@ function run(command, args, options = {}) {
 }
 
 const secrets = loadEnvFile(`${PRIVATE_DIR}/.env`);
-for (const key of ['DB_PASSWORD', 'APP_ORIGIN', 'DEVICE_REGISTRATION_SECRET', 'PROVIDER_CREDENTIAL_KEY']) {
+for (const key of ['DB_PASSWORD', 'APP_ORIGIN', 'PROVIDER_CREDENTIAL_KEY']) {
   if (!secrets[key]) {
     console.error(`activate: private/.env is missing ${key}`);
     process.exit(1);
@@ -88,7 +88,6 @@ const webEnv = {
   APP_ORIGIN: secrets.APP_ORIGIN,
   DASHBOARD_DISPLAY_ORIGINS: secrets.DASHBOARD_DISPLAY_ORIGINS ?? '',
   DASHBOARD_USER_TOKEN_FILE: `${PRIVATE_DIR}/user-token`,
-  DEVICE_REGISTRATION_SECRET: secrets.DEVICE_REGISTRATION_SECRET,
   PROVIDER_CREDENTIAL_KEY: secrets.PROVIDER_CREDENTIAL_KEY,
 };
 const workerEnv = {

@@ -4,7 +4,7 @@ import { requestRefresh } from '../quota/requests';
 import { managedStrategy } from '../providers/managed';
 import { readManagedCredential } from '../providers/managed-credentials';
 import { snapshotForQuotaHistory } from '../quota/history-persistence';
-import { getAccounts, getDashboard, getDevices, getSessions } from './dashboard';
+import { getAccounts, getDashboard } from './dashboard';
 
 const PRIVATE_NO_STORE = { 'Cache-Control': 'private, no-store' };
 type RefreshContext = { params: Promise<{ id: string }> };
@@ -27,20 +27,6 @@ export function createDashboardHandlers(pool: Pool) {
       if (auth.status === 'unauthorized') return jsonError('UNAUTHORIZED', 401);
       if (auth.status === 'unavailable') return jsonError('AUTH_UNAVAILABLE', 503);
       try { return Response.json(await getDashboard(new Date(), pool), { headers: PRIVATE_NO_STORE }); }
-      catch { return jsonError('DASHBOARD_UNAVAILABLE', 503); }
-    },
-    async devices(request: Request): Promise<Response> {
-      const auth = await authorize(request);
-      if (auth.status === 'unauthorized') return jsonError('UNAUTHORIZED', 401);
-      if (auth.status === 'unavailable') return jsonError('AUTH_UNAVAILABLE', 503);
-      try { return Response.json(await getDevices(new Date(), pool), { headers: PRIVATE_NO_STORE }); }
-      catch { return jsonError('DASHBOARD_UNAVAILABLE', 503); }
-    },
-    async sessions(request: Request): Promise<Response> {
-      const auth = await authorize(request);
-      if (auth.status === 'unauthorized') return jsonError('UNAUTHORIZED', 401);
-      if (auth.status === 'unavailable') return jsonError('AUTH_UNAVAILABLE', 503);
-      try { return Response.json(await getSessions(new Date(), pool), { headers: PRIVATE_NO_STORE }); }
       catch { return jsonError('DASHBOARD_UNAVAILABLE', 503); }
     },
     async accounts(request: Request): Promise<Response> {

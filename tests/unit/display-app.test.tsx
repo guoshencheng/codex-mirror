@@ -16,8 +16,7 @@ it('uses a display link to show the shared read-only pixel dashboard', async () 
   window.history.replaceState(null, '', '/display/#token=' + token);
   const fetcher = vi.fn(async () => Response.json({
     generatedAt: new Date().toISOString(),
-    devices: [{ id: 'device-a', name: 'Desk', heartbeatAt: new Date().toISOString(), connection: 'online', streamIncomplete: false }],
-    sessions: [], accounts: [],
+    accounts: [],
   }));
   vi.stubGlobal('fetch', fetcher);
   render(<App />);
@@ -26,8 +25,7 @@ it('uses a display link to show the shared read-only pixel dashboard', async () 
     'https://codex-status.icerock.top/api/display/dashboard',
     expect.objectContaining({ headers: { Authorization: 'Bearer ' + token } }),
   ));
-  fireEvent.click(screen.getByRole('button', { name: '查看设备状态' }));
-  expect(screen.getByText(/Desk/)).toBeTruthy();
+  expect(screen.getByRole('heading', { name: '额度总览' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: '打开设置' })).toBeNull();
   expect(screen.queryByLabelText('API 地址')).toBeNull();
   expect(window.location.hash).toBe('');
@@ -45,10 +43,8 @@ it('passes the display API history loader into the shared read-only quota detail
   const time = new Date().toISOString();
   const dashboard = {
     generatedAt: time,
-    devices: [],
-    sessions: [],
     accounts: [{
-      id: 'account-a', providerId: 'codex', label: 'Codex', deviceIds: [], lastAttemptAt: time, lastSuccessAt: time,
+      id: 'account-a', providerId: 'codex', label: 'Codex', lastAttemptAt: time, lastSuccessAt: time,
       errorCode: null, refreshStatus: 'idle', snapshot: { accountId: 'account-a', providerId: 'codex', observedAt: time, serviceAvailable: true,
         metrics: [{ kind: 'quota-window', key: 'primary', label: '5H', usedPercent: 28, windowDurationSeconds: 18000, resetsAt: null }] },
     }],
